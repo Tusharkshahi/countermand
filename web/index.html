@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8f5">
+  <meta name="description" content="Recover agent work. Preserve what happened after. A local Countermand rehearsal.">
+  <title>Countermand / Recovery Workspace</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/" aria-label="Countermand home">
+      <img src="/favicon.svg" width="33" height="33" alt="">
+      <span>countermand<span class="brand-period">.</span></span>
+    </a>
+    <span class="header-divider"></span>
+    <span class="header-label">Recovery workspace</span>
+    <div class="header-actions">
+      <a class="text-button" href="/github">GitHub pilot &nearr;</a>
+      <span class="environment"><span class="status-dot"></span>Local rehearsal</span>
+      <button class="text-button" id="switch-setup">Switch setup <span aria-hidden="true">&#8599;</span></button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="intro">
+      <div>
+        <div class="eyebrow"><span class="tiny-cross" aria-hidden="true">+</span> HUMAN CONTROL, AFTER THE FACT</div>
+        <h1>Good work deserves<br>a way back.</h1>
+        <p class="intro-copy">Recover what your agents changed.<br class="mobile-break"> Keep what happened after.</p>
+      </div>
+      <div class="intro-actions">
+        <button class="button button-primary" id="run-demo">
+          <span id="run-label">Run rehearsal</span><span aria-hidden="true">&#8599;</span>
+        </button>
+        <span class="quiet-caption">Synthetic data. Real state changes.</span>
+      </div>
+    </section>
+
+    <section class="workflow-bar" aria-label="Workflow summary">
+      <div class="customer-identity">
+        <span class="customer-monogram" aria-hidden="true">A</span>
+        <div><span class="overline">CURRENT WORKFLOW</span><h2>Acme Studio onboarding</h2></div>
+      </div>
+      <div class="workflow-meta">
+        <span class="workflow-status" id="workflow-status">Ready to rehearse</span>
+        <select id="run-select" aria-label="Select a saved rehearsal"></select>
+        <button class="icon-button" id="export" aria-label="Export workflow evidence" title="Export evidence">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v9m-3-3 3 3 3-3M4 12v4h12v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <div class="step-guide" id="step-guide" aria-label="Rehearsal steps">
+      <span class="step active" data-step="1"><b>01</b> Run the workflow</span>
+      <span class="step-line"></span>
+      <span class="step" data-step="2"><b>02</b> Make a human edit</span>
+      <span class="step-line"></span>
+      <span class="step" data-step="3"><b>03</b> Recover with care</span>
+    </div>
+
+    <section class="resource-grid" id="resources" aria-label="Current service state"></section>
+
+    <div class="work-grid">
+      <section class="timeline-panel" aria-labelledby="timeline-title">
+        <div class="section-heading">
+          <div><span class="overline">THE PAPER TRAIL</span><h2 id="timeline-title">What happened</h2></div>
+          <button class="button button-secondary button-small" id="human-edit" disabled>
+            <span aria-hidden="true">+</span> Human edit
+          </button>
+        </div>
+        <div class="timeline" id="timeline"></div>
+        <div class="timeline-footnote"><span class="small-ring" aria-hidden="true"></span>Recorded from local adapters. Not simulated agent reasoning.</div>
+      </section>
+
+      <section class="recovery-panel" aria-labelledby="recovery-title">
+        <div class="section-heading">
+          <div><span class="overline">A CONSIDERED WAY BACK</span><h2 id="recovery-title">Recovery plan</h2></div>
+          <span id="plan-badge" class="subtle-badge">Not prepared</span>
+        </div>
+        <div id="recovery-content"></div>
+      </section>
+    </div>
+
+    <section class="outcome-panel" id="outcome" hidden aria-labelledby="outcome-title"></section>
+
+    <footer class="workspace-footer">
+      <span>Built for decisions that deserve a second look.</span>
+      <span><span class="status-dot neutral"></span>Switch not connected<span class="footer-separator">/</span>Local adapters only</span>
+    </footer>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <div class="error-notice" id="error-notice" role="alert" hidden>
+    <span id="error-message"></span><button class="text-button" id="dismiss-error">Dismiss</button>
+  </div>
+
+  <dialog id="edit-dialog" aria-labelledby="edit-title">
+    <form id="edit-form">
+      <div class="dialog-heading"><span class="overline">OUTSIDE THE AGENT WORKFLOW</span><button class="icon-button dialog-close" type="button" aria-label="Close">&times;</button></div>
+      <h2 id="edit-title">Let a human change things.</h2>
+      <p>This edit is recorded as Maya's. Recovery should preserve it, not rewind the entire customer record.</p>
+      <label for="contact-name">Customer contact</label>
+      <input id="contact-name" name="contact" value="Maya Chen" required maxlength="100" autocomplete="off">
+      <label class="checkbox-label"><input id="create-conflict" type="checkbox"> Also change the discount to 12%</label>
+      <p class="field-help">Optional: create a same-field conflict. The discount recovery must stop and ask for a decision.</p>
+      <div class="dialog-buttons"><button class="button button-secondary dialog-close" type="button">Cancel</button><button class="button button-primary" type="submit">Save human edit</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="switch-dialog" aria-labelledby="switch-title">
+    <div class="dialog-heading"><span class="overline">THE NEXT MILESTONE</span><button class="icon-button dialog-close" type="button" aria-label="Close">&times;</button></div>
+    <h2 id="switch-title">Local proof. Then live agents.</h2>
+    <p>This workspace is a working recovery rehearsal. The actions are real local changes, but no AI agents or Switch server are connected yet.</p>
+    <ol class="setup-list">
+      <li><b>Install Switch Console</b><span>Use its local server and bundled Mattermost.</span></li>
+      <li><b>Bring a supported coding agent</b><span>Use an existing Claude Code, Codex, or other supported account.</span></li>
+      <li><b>Connect the two owning agents</b><span>Sales owns CRM changes. Operations owns billing and messaging.</span></li>
+      <li><b>Run the same scenario in a room</b><span>Coordinate and approve through Switch; inspect evidence here.</span></li>
+    </ol>
+    <a class="button button-primary setup-link" href="https://docs.switchagents.ai/switch-rooms/getting-started" target="_blank" rel="noopener noreferrer">Open Switch quickstart <span aria-hidden="true">&#8599;</span></a>
+    <p class="field-help">The repository's switch/README.md documents the integration boundary. Never put adapter credentials in a shared room.</p>
+  </dialog>
+</body>
+</html>

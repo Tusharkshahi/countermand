@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Countermand / GitHub Pilot</title>
+  <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/github.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/"><img src="/favicon.svg" width="33" height="33" alt=""><span>countermand.</span></a>
+    <span class="header-divider"></span><span class="header-label">GitHub recovery pilot</span>
+    <div class="header-actions"><a class="text-button" href="/">Local rehearsal</a><span class="environment"><span class="status-dot"></span>Switch not connected</span></div>
+  </header>
+  <main class="workspace">
+    <section class="intro">
+      <div><div class="eyebrow">BOUNDED ACTIONS. REAL CONSEQUENCES.</div>
+        <h1>Recover the work.<br>Not the team's progress.</h1>
+        <p class="intro-copy">Create three tracked sandbox issues. Preserve the ones a human changes.<br>No code changes, issue deletion, or untracked recovery.</p>
+      </div>
+      <button class="button button-secondary" id="gh-export" disabled>Export evidence &darr;</button>
+    </section>
+    <section class="workflow-bar">
+      <div class="customer-identity"><span class="customer-monogram">G</span><div><span class="overline">EXPLICITLY SCOPED TARGET</span><h2 id="gh-repo">Loading configuration...</h2></div></div>
+      <div class="workflow-meta"><span class="workflow-status" id="gh-status">Checking local setup</span><select id="gh-runs" aria-label="Select GitHub run"></select></div>
+    </section>
+    <section class="gh-setup" id="gh-setup">
+      <div><h2>Authorize only a small, disposable run.</h2><p>Type the exact repository name to authorize up to three new, marked issues. This does not authorize changes to existing issues or repository code.</p></div>
+      <form id="gh-authorize"><label class="overline" for="gh-confirm">OWNER / REPOSITORY</label><input id="gh-confirm" type="text" autocomplete="off" required placeholder="Tusharkshahi/TaskMind"><button class="button button-primary" id="gh-new" type="submit" disabled>Authorize new run</button></form>
+      <p class="field-help" id="gh-config-note">Live writes are off by default. Configure locally; never paste tokens into this page or chat.</p>
+    </section>
+    <section id="gh-work" hidden>
+      <div class="gh-runline"><code id="gh-run-id"></code><button class="text-button" id="gh-copy">Copy run ID</button><span>Share this ID with the two agents in your Switch room.</span></div>
+      <div class="gh-toolbar">
+        <button class="button button-secondary" id="gh-create">Create 3 demo issues manually</button>
+        <button class="button button-secondary" id="gh-refresh">Refresh from GitHub</button>
+        <button class="button button-primary" id="gh-preview">Preview recovery &rarr;</button>
+      </div>
+      <p class="gh-caption">For the live agent demonstration, have the executor create issues through its scoped tools instead. Manual buttons are explicitly a pilot convenience.</p>
+      <section class="resource-grid" id="gh-issues" aria-label="Tracked GitHub issues"></section>
+      <p class="gh-adoption">Before previewing: open an issue in GitHub and edit its title or add a comment. Countermand should preserve that issue while proposing closure of untouched issues.</p>
+      <div class="work-grid">
+        <section class="timeline-panel"><div class="section-heading"><div><span class="overline">ACTUAL RECEIPTS</span><h2>What happened</h2></div></div><div class="timeline" id="gh-events"></div></section>
+        <section class="recovery-panel"><div class="section-heading"><div><span class="overline">CLOSE, PRESERVE, OR STOP</span><h2>Recovery review</h2></div><span class="subtle-badge" id="gh-plan-status">No plan</span></div><div id="gh-plan"></div></section>
+      </div>
+    </section>
+    <footer class="workspace-footer"><span>Local human approval / no verified Switch identity bridge yet.</span><span>No atomic GitHub recovery guarantee. Irreversible consequences stay visible.</span></footer>
+  </main>
+  <div class="error-notice" role="alert" id="gh-error" hidden></div>
+</body>
+</html>

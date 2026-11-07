@@ -1,0 +1,8 @@
+.countermand/
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+node_modules/
+test-results/
+*.zip

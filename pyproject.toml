@@ -1,0 +1,9 @@
+[project]
+name = "countermand"
+version = "0.1.0"
+description = "Conflict-aware recovery for work performed by AI teams."
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.unittest]
+start-directory = "tests"
