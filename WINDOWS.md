@@ -67,7 +67,9 @@ configuration is taking too long. Follow the installed version's prerequisite ch
 
 Then:
 
-1. Verify `codex --version` and configure Codex as a supported Switch provider.
+1. Configure a supported provider. The operator now uses Cursor: verify
+   `agent --version`, complete `agent login`, and confirm it is ready in Switch.
+   Codex is an alternative, not an application requirement.
 2. Get one agent answering in a real Switch room.
 3. Run `py -3 -m countermand.doctor` for the two scoped MCP process descriptions.
 4. Configure the executor and reviewer separately. Do not give both sets of tools

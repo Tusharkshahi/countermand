@@ -8,8 +8,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 TOP = {".gitignore", "README.md", "WINDOWS.md", "pyproject.toml",
        "start-windows.cmd", "check-windows.cmd", "configure-github.cmd"}
-FOLDERS = {"countermand", "web", "switch", "tests"}
-SUFFIXES = {".py", ".md", ".html", ".css", ".js", ".mjs", ".svg"}
+FOLDERS = {"countermand", "web", "switch", "tests", "docs"}
+SUFFIXES = {".py", ".md", ".html", ".css", ".js", ".mjs", ".svg", ".png"}
 
 
 def source_files():

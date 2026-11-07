@@ -5,10 +5,13 @@
 Implemented: a working local domain, field-versioned receipts, exact-plan approval,
 and scoped MCP tools that call the same tested HTTP API used by the rehearsal.
 
-Pending: provider installation/configuration, a real Switch room, agent-to-agent
-handoffs, and a verified mapping from a human's Switch identity/approval to the
-recovery API. This repository must not be presented as a live Switch integration
-until those steps are exercised.
+Operator setup: Windows Switch Console, Cursor provider, and a Slack room with
+two registered agents are configured. Full MCP execution and agent-to-agent
+handoffs still need end-to-end verification.
+
+Pending: a verified mapping from a human's Switch identity/approval to the
+recovery API. Current human approval remains local. Do not present a room greeting
+or available tools as proof of a completed integration.
 
 ## Intended Topology
 
@@ -63,7 +66,7 @@ Sales token does not grant Operations access.
 ## Live Integration Checklist
 
 1. Install Switch Console and configure a supported coding-agent provider.
-2. Get one agent replying in the bundled Mattermost chat.
+2. Get one agent replying in the connected chat app (Slack or bundled Mattermost).
 3. Configure the two MCP clients with their separate role credentials.
 4. Add both agents to one private room and permit their addressed handoffs.
 5. Create an externally driven run using the local human API with `mode: "switch"`.
