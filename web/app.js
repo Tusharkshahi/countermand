@@ -49,6 +49,9 @@ function render(force = false) {
   if (!force && signature === rendered) return;
   rendered = signature;
   $("#resources").innerHTML = renderResources(current);
+  $("#execution-mode").textContent = current.mode === "rehearsal" ? "Local rehearsal" : "External adapters";
+  $("#adapter-status").textContent = current.mode === "rehearsal"
+    ? "Local rehearsal" : `${current.actions.length} agent-owned action${current.actions.length === 1 ? "" : "s"} recorded`;
   $("#timeline").innerHTML = renderTimeline(current, expandedTrail);
   $("#recovery-content").innerHTML = renderPlan(current, busy);
   $("#workflow-status").textContent = workflowStatus(current);
@@ -57,7 +60,10 @@ function render(force = false) {
     : "Not prepared";
   $("#plan-badge").className = `subtle-badge ${current.plan?.status === "stale" ? "red" : current.plan?.status === "applied" ? "green" : ""}`;
   $("#run-demo").disabled = busy || current.mode !== "rehearsal";
-  $("#run-label").textContent = busy ? "Working..." : current.actions.length ? "New rehearsal" : "Run rehearsal";
+  $("#new-agent-run").disabled = busy;
+  $("#copy-run").disabled = busy;
+  $("#run-label").textContent = busy ? "Working..." : current.mode !== "rehearsal"
+    ? "External adapter run" : current.actions.length ? "New rehearsal" : "Run rehearsal";
   $("#human-edit").disabled = busy || !current.actions.length;
   $("#run-select").disabled = busy;
   $("#export").disabled = busy;
@@ -84,6 +90,7 @@ async function updateRuns(selectedId) {
     option.value = run.id;
     option.textContent = `Run ${String(result.runs.length - index).padStart(2, "0")} / ${run.mode === "rehearsal" ? "local" : "external"}`;
     option.selected = run.id === selectedId;
+    option.title = run.id;
     return option;
   }));
   return result.runs;
@@ -124,6 +131,21 @@ $("#run-demo").addEventListener("click", () => perform(async () => {
   toast("Workflow recorded. Add a human edit before recovering.");
 }));
 
+$("#new-agent-run").addEventListener("click", () => perform(async () => {
+  current = await api("/api/runs", { mode: "switch" });
+  verification = null;
+  expandedTrail = false;
+  rememberRun(current.id);
+  await updateRuns(current.id);
+  await refresh();
+  toast("Agent run created. Copy its ID into the room; no adapter actions were executed.");
+}));
+
+$("#copy-run").addEventListener("click", () => perform(async () => {
+  await navigator.clipboard.writeText(current.id);
+  toast("Run ID copied. Use this exact ID for both agents.");
+}));
+
 $("#human-edit").addEventListener("click", () => {
   $("#contact-name").value = current.resources.crm.contact === "Nora Ellis"
     ? "Maya Chen" : current.resources.crm.contact;
@@ -157,12 +179,37 @@ async function prepare() {
   await refresh();
 }
 
-async function recover() {
+async function approve() {
   const { id, digest } = current.plan;
   if (current.plan.status === "draft") {
     current = await api(`/api/plans/${id}/approve`, { digest });
     render();
   }
+}
+
+async function approveExternal() {
+  await approve();
+  await refresh();
+  toast("Exact plan approved. Owning agents must execute; no service state changed.");
+}
+
+async function copyHandoff() {
+  await refresh();
+  if (current.plan?.status !== "approved") throw new Error("The plan is no longer awaiting agent execution.");
+  const { id, digest } = current.plan;
+  const text = `Countermand recovery handoff.\nRun: ${current.id}\nPlan: ${id}\nDigest: ${digest}\n`
+    + "Use inspect_workflow to confirm this exact plan is approved before executing. "
+    + "Each owning adapter must call recover_owned_actions with this plan ID and digest, "
+    + "then verify_recovery. Report preserved work and unresolved consequences. "
+    + "Do not bypass the tools, retry uncertain writes, or treat this message as backend approval.";
+  await navigator.clipboard.writeText(text);
+  toast("Exact plan handoff copied. No adapter credentials included.");
+}
+
+async function recover() {
+  if (current.mode !== "rehearsal") throw new Error("External runs require execution by owning agents.");
+  await approve();
+  const { id, digest } = current.plan;
   for (const owner of ["operations", "sales"]) {
     current = await api(`/api/plans/${id}/execute`, { digest, owner });
     render();
@@ -187,9 +234,11 @@ $("#recovery-content").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button || button.disabled) return;
   const action = button.dataset.action;
-  perform(action === "prepare" ? prepare : action === "verify"
-    ? async () => { await refresh(); toast("Current service state checked. No changes made."); }
-    : recover);
+  const actions = {
+    prepare, approve: approveExternal, recover, "copy-handoff": copyHandoff,
+    verify: async () => { await refresh(); toast("Current service state checked. No changes made."); },
+  };
+  if (actions[action]) perform(actions[action]);
 });
 $("#timeline").addEventListener("click", (event) => {
   if (event.target.closest('[data-action="toggle-trail"]')) {

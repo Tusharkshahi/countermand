@@ -6,8 +6,10 @@ Implemented: a working local domain, field-versioned receipts, exact-plan approv
 and scoped MCP tools that call the same tested HTTP API used by the rehearsal.
 
 Operator setup: Windows Switch Console, Cursor provider, and a Slack room with
-two registered agents are configured. Full MCP execution and agent-to-agent
-handoffs still need end-to-end verification.
+two registered agents are configured. The operator reports a successful forward
+workflow through MCP: inspection, discount application, addressed handoff, invoice
+creation, and local-notice delivery. Full human-approved recovery still needs
+end-to-end verification on Windows.
 
 Pending: a verified mapping from a human's Switch identity/approval to the
 recovery API. Current human approval remains local. Do not present a room greeting
@@ -69,13 +71,16 @@ Sales token does not grant Operations access.
 2. Get one agent replying in the connected chat app (Slack or bundled Mattermost).
 3. Configure the two MCP clients with their separate role credentials.
 4. Add both agents to one private room and permit their addressed handoffs.
-5. Create an externally driven run using the local human API with `mode: "switch"`.
+5. Click **Create agent run** in the UI, or use the local human API with `mode: "switch"`.
    This mode disables browser impersonation of the owning adapters. It is only a
    marker, not proof that Switch is connected.
 6. Have Sales perform its action and hand the shared run ID to Operations.
 7. Have Operations create the draft and deliver the local test notice.
 8. Record a newer human edit and request recovery in the room.
-9. Implement/verify the human approval bridge. Bind an authorized Switch user to
+9. For the current local-approval pilot, inspect the plan in the UI and click
+   **Approve exact plan**. No service state changes on approval. Copy the exact
+   agent handoff back into the room.
+   A future human approval bridge must bind an authorized Switch user to
    the exact plan ID and digest, authenticate the server-side approval request,
    reject stale state, and keep the human credential away from agent processes.
 10. Execute each owner's recovery through its MCP client; inspect and export the
@@ -84,8 +89,9 @@ Sales token does not grant Operations access.
 12. Replace the UI's fixed connection notice only after real liveness/provenance
     is available. A tool call alone is not evidence of a Switch connection.
 
-The browser's local **Approve & recover** button is a rehearsal convenience. It
-does not stand in for step 9 in the final hackathon story.
+The browser's **Approve & recover** button is a rehearsal-only convenience.
+External runs instead use approval-only controls and owner-scoped agent execution.
+Do not describe current local approval as a verified Switch human identity bridge.
 
 ## Constraints To Preserve
 

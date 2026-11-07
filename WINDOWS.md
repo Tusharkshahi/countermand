@@ -19,10 +19,30 @@ py -3 -m unittest discover -s tests -v
 py -3 -m countermand.doctor
 ```
 
+## Recover An Externally Driven Run
+
+Once the two agents have created the synthetic discount, invoice, and notice:
+
+1. Select that **external** run in the web UI. Do not click **Run rehearsal**.
+   For a new scenario, **Create agent run** creates an empty externally driven run;
+   copy its ID using the copy icon beside the run selector.
+2. Add a human contact edit.
+3. Ask the reviewer in the Switch room to call `prepare_recovery` for the run.
+4. Inspect the proposed fields, preserved contact, residuals, and fingerprint.
+   Previewing freezes new forward work in this run; it does not repair service fields.
+5. Click **Approve exact plan**. This approves only; the service state does not change.
+6. Use **Copy agent handoff**, paste it in the room, and address the owning agents.
+7. Each agent calls `recover_owned_actions` with the exact plan ID and full digest.
+8. Read `verify_recovery` and export evidence. The original local notice remains delivered.
+
+The UI says **Switch status not monitored**, not "not connected." The backend does
+not probe Switch Console. Owner-scoped action receipts and actual room activity
+are separate evidence; neither a greeting nor a run-mode label proves full integration.
+
 ## Opt Into Real GitHub Issues
 
 The GitHub pilot is disabled by default and never modifies repository code.
-It can create at most three issues in each human-authorized run, and recovery only
+It can create one to three issues in each human-authorized run, and recovery only
 considers the exact issue IDs recorded in that run. Existing issues are out of scope.
 
 1. Create a fine-grained GitHub token for **Tusharkshahi/TaskMind only**, with
@@ -31,8 +51,10 @@ considers the exact issue IDs recorded in that run. Existing issues are out of s
    a read-only API request, and stores the credential in ignored local state.
 3. Stop the server and run `start-windows.cmd --github-writes`.
 4. Open http://127.0.0.1:8787/github.
-5. Type the exact repository name to authorize a run. Issue creation is a separate,
-   explicit step, either through the manual pilot button or the owning agent's tool.
+5. Open **Authorize a new workflow**, enter its intent and one to three actual issue
+   titles, and confirm the exact repository name. This fixes the manifest for the run.
+   Issue creation is a separate step, through the manual pilot button or the owning
+   agent's tool. Agents cannot add unapproved slots or rewrite the manifest.
 6. Edit one created issue **directly on GitHub** (title or a comment).
 7. Preview recovery. The edited issue should say **preserve**.
 8. Review and acknowledge the non-atomic limitation before approving the exact plan.
@@ -40,6 +62,9 @@ considers the exact issue IDs recorded in that run. Existing issues are out of s
 
 No GitHub writes were performed during preparation on the Mac. Real endpoint
 behavior must be exercised on the sandbox before presenting a live demo.
+
+Existing local databases are migrated without deleting runs. Old pilot runs retain
+their original three-task scenario; new runs use their stored explicit manifest.
 
 ### Important Limits
 

@@ -32,16 +32,20 @@ what needs a different action, preserve newer work, and expose what remains.**
 | Exact-plan approval, stale-plan refusal, field conflicts, scoped writes | Covered by automated tests |
 | Sales and Operations stdio MCP clients | Implemented; provider wiring must be verified |
 | Windows Switch Console, Cursor provider, Slack room with two agents | Configured by the operator; agents joined the room |
-| Complete Switch-to-Countermand tool execution and recovery | Integration verification in progress |
+| Switch-to-Countermand forward workflow on Windows | Operator-reported successful inspection, discount, invoice, and notice calls |
+| Human-approved recovery through both Switch agents on Windows | Awaiting end-to-end verification |
 | Authenticated Switch-human approval bridge | Not implemented; approval is local |
 | Optional real GitHub Issues pilot | Implemented; tested with a fake provider, not live-verified |
 
-**55 automated tests pass.** Browser checks pass on desktop and at 390px/360px
-mobile widths. These checks were run on macOS; Windows execution needs its own check.
+**64 automated tests pass.** Browser checks cover desktop/mobile (390px/360px),
+external approval-only controls, scoped recovery, and the GitHub task-manifest flow.
+These checks were run on macOS; Windows execution needs its own check.
 
-The UI and health endpoint still report `switch_connected: false`. This is a
-fixed disclosure, not a live connection probe. A room existing or a run being
-marked `switch` must not be presented as proof of completed integration.
+The UI distinguishes **Local rehearsal** from **External adapters** and displays
+recorded owner-scoped action counts. Switch Console manages the room connection;
+Countermand does not probe its liveness. `/health` returns `switch_connected: null`
+and `switch_status: "not_monitored"` rather than incorrectly reporting a disconnection.
+A run being marked `switch` is not, by itself, proof of a Switch connection.
 
 ## Run
 
@@ -149,8 +153,9 @@ third-party verifier or an OS-level security boundary.
    configurations. Allow addressed handoffs between your own agents.
 3. Launch each MCP using the commands below. Supply only its role credential
    privately, never the human approval credential.
-4. A local human creates a run with `mode: "switch"` through the authenticated API.
-   This disables browser impersonation of the owning adapters.
+4. Click **Create agent run** in the UI and copy its run ID into the room.
+   This creates an empty run with `mode: "switch"` and disables browser impersonation
+   of the owning adapters. No adapter action is executed by creating a run.
 5. Have Sales apply the discount and hand the run ID to Operations for the invoice
    and notice. Add a human edit, then ask for a recovery proposal.
 6. The human approves the stored plan and digest locally. Each owning agent
@@ -166,10 +171,23 @@ Each process reads `COUNTERMAND_ADAPTER_TOKEN`. Alternatively, use
 On Windows use `py -3`; `py -3 -m countermand.doctor` prints absolute-path
 process descriptions without revealing credential values.
 
-There is deliberately **no agent-facing approval tool**. In external mode the
-browser's combined **Approve & recover** rehearsal convenience is not the
-execution path: human approval uses the local authenticated API, then agents
-execute. A Slack "approved" message does not grant backend approval.
+There is deliberately **no agent-facing approval tool**. In external mode the UI
+offers **Approve exact plan**, which records approval without changing service
+state. **Copy agent handoff** copies the run ID, plan ID, and complete digest, not
+credentials. Each owning agent then executes through its scoped tools.
+A Slack "approved" message does not grant backend approval.
+
+For the synthetic room demonstration:
+
+1. After the agents finish the forward workflow, select its **external** run in the UI.
+2. Save Maya's newer contact using **Human edit**.
+3. Ask the reviewer to call `prepare_recovery` with the same run ID.
+4. Review the UI plan and click **Approve exact plan**.
+5. Copy the handoff into the room and address the owning agents. Have each call
+   `recover_owned_actions`, then inspect `verify_recovery` and export evidence.
+
+The local rehearsal's combined **Approve & recover** button remains available
+only for rehearsal mode; it cannot impersonate owners in an external run.
 
 See [Switch handoff](switch/README.md), [agent briefs](switch/), and
 [Switch's quickstart](https://docs.switchagents.ai/switch-rooms/getting-started).
@@ -184,6 +202,8 @@ The language model is not responsible for enforcing these invariants:
 - Each targeted field is checked by value **and version**, including ABA changes.
 - Check-and-write happens in a local SQLite transaction.
 - Recovery receipts make retries idempotent.
+- A recovery preview freezes new forward actions; late handoffs cannot append
+  unreviewed consequences. Retrying an already receipted action remains idempotent.
 - Changes to unrelated fields do not invalidate safe recovery or get overwritten.
 - A delivered notice is never marked unsent. A correction remains a new draft.
 
@@ -207,9 +227,17 @@ Do not expose this server to a network or use production data.
 
 ## Optional GitHub Pilot
 
-The `/github` workspace can create up to three marked issues in a human-authorized
-repository run. It proposes closing untouched tracked issues and preserving changed
-ones. It does not edit code, delete issues, or recover untracked existing issues.
+The `/github` workspace accepts a workflow intent and **one to three actual task
+definitions**. A human authorizes this immutable manifest before the executor can
+create its marked issues. Agents cannot rewrite task definitions or invent extra slots.
+Recovery proposes closing untouched tracked issues and preserving changed ones.
+It does not edit code, delete issues, or recover untracked existing issues.
+
+Example: a team cancels a due-date milestone after its agent creates the work
+items. One teammate has already adopted an issue and added a comment. Countermand
+leaves that issue open for a human decision while closing the untouched issues
+after exact-plan approval. The point is not "undo three issues"; it is retaining
+the boundary between the agent's completed instruction and subsequent work.
 
 **Writes are disabled by default.** Configuration requires a repository-scoped
 Issues token, `--github-writes`, and explicit run authorization. See
@@ -245,6 +273,10 @@ On platforms other than macOS, set `CHROME_PATH` to the Chrome executable. The t
 starts an isolated server on port 8788, uses a fresh browser profile, and saves
 screenshots under `.countermand/browser-tests/`. It does not touch your normal
 browser profile or the main demo's database.
+
+The browser server uses an explicitly fake, in-memory GitHub provider. It exercises
+HTTP, forms, authorization, preservation, approval, and evidence export without
+making GitHub network requests or mutations.
 
 The browser harness defaults to `python3`; set `PYTHON` to your Python executable
 when that name is unavailable on Windows. Node and Chrome are test-only dependencies.

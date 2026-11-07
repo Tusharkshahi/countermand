@@ -15,7 +15,8 @@ const directory = mkdtempSync(join(artifacts, "run-"));
 const base = "http://127.0.0.1:8788";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const backend = spawn(process.env.PYTHON || "python3", [
-  "-m", "countermand.server", "--port", "8788", "--state-dir", join(directory, "state"),
+  "-c", "import sys; sys.path.insert(0, 'tests'); from browser_fixture import main; main()",
+  "--port", "8788", "--state-dir", join(directory, "state"),
 ], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
 let backendLogs = "";
 backend.stdout.on("data", (data) => { backendLogs += data; });
@@ -181,8 +182,120 @@ try {
   await evaluate("document.querySelector('#switch-dialog').close()");
   await send("Page.reload");
   await waitFor("document.querySelector('#workflow-status').textContent.includes('Human decision')", "reload persistence");
+
+  // Exercise external approval with separate authenticated API clients, not a simulated Switch room.
+  const credentials = JSON.parse(readFileSync(join(directory, "state", "credentials.json"), "utf8"));
+  async function ownedRequest(path, body, role) {
+    const response = await fetch(base + path, {
+      method: body === undefined ? "GET" : "POST",
+      headers: { "Authorization": `Bearer ${credentials[role]}`, "Content-Type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const data = await response.json();
+    assert(response.ok, data.error || `API failed: ${response.status}`);
+    return data;
+  }
+  await click("#new-agent-run");
+  await waitFor("document.querySelector('#execution-mode').textContent === 'External adapters' && document.querySelector('#workflow-status').textContent === 'Awaiting agents' && !document.querySelector('#new-agent-run').disabled", "new empty agent run");
+  const external = await ownedRequest(`/api/runs/${await evaluate("document.querySelector('#run-select').value")}`, undefined, "human");
+  assert.equal(external.mode, "switch");
+  assert.equal(external.actions.length, 0, "Creating an agent run must not impersonate adapters.");
+  await ownedRequest(`/api/runs/${external.id}/actions`, { kind: "discount" }, "sales");
+  await waitFor("document.querySelector('#workflow-status').textContent === 'Workflow in progress'", "partial forward workflow");
+  for (const [kind, role] of [["invoice", "operations"], ["message", "operations"]]) {
+    await ownedRequest(`/api/runs/${external.id}/actions`, { kind }, role);
+  }
+  await ownedRequest(`/api/runs/${external.id}/human-edit`, { field: "contact", value: "Maya Chen" }, "human");
+  const prepared = await ownedRequest(`/api/runs/${external.id}/plans`, {}, "operations");
+  await send("Emulation.setDeviceMetricsOverride", {
+    width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false,
+  });
+  await send("Page.reload");
+  await waitFor(`Array.from(document.querySelector('#run-select').options).some(o => o.value === ${JSON.stringify(external.id)})`, "external run selection");
+  await evaluate(`document.querySelector('#run-select').value = ${JSON.stringify(external.id)};
+    document.querySelector('#run-select').dispatchEvent(new Event('change'));`);
+  await waitFor("document.querySelector('#execution-mode').textContent === 'External adapters' && document.querySelector('[data-action=\"approve\"]') && !document.querySelector('[data-action=\"approve\"]').disabled", "external plan");
+  assert.equal(await evaluate("document.querySelector('#run-demo').disabled"), true);
+  assert.equal(await evaluate("document.querySelector('.workspace-footer').textContent.includes('Switch status not monitored')"), true);
+  await click('[data-action="approve"]');
+  await waitFor("document.querySelector('#workflow-status').textContent === 'Recovery approved' && !document.querySelector('[data-action=\"copy-handoff\"]').disabled", "approval only");
+  const approved = await ownedRequest(`/api/runs/${external.id}`, undefined, "human");
+  assert.equal(approved.resources.crm.discount, 30, "Approval must not restore the discount.");
+  assert.equal(approved.resources.billing.status, "draft", "Approval must not void the invoice.");
+  assert(approved.actions.every(a => a.recovery === "pending"));
+  await evaluate(`Object.defineProperty(navigator, 'clipboard', {
+    configurable: true, value: { writeText: async text => { window.copiedHandoff = text; } }
+  });`);
+  await click("#copy-run");
+  await waitFor(`window.copiedHandoff === ${JSON.stringify(external.id)} && !document.querySelector('[data-action="copy-handoff"]').disabled`, "copied run ID");
+  await click('[data-action="copy-handoff"]');
+  await waitFor("typeof window.copiedHandoff === 'string' && window.copiedHandoff.includes('Countermand recovery handoff.')", "copied handoff");
+  const handoff = await evaluate("window.copiedHandoff");
+  assert(handoff.includes(prepared.plan.id));
+  assert(handoff.includes(prepared.plan.digest));
+  assert(Object.values(credentials).every(token => !handoff.includes(token)));
+  await screenshot("desktop-external-approved");
+  for (const role of ["operations", "sales"]) {
+    await ownedRequest(`/api/plans/${prepared.plan.id}/execute`, { digest: prepared.plan.digest }, role);
+  }
+  await waitFor("document.querySelector('#workflow-status').textContent.includes('Recovered /')", "external owned recovery");
+  assert.equal(await evaluate("document.querySelector('#resources').textContent.includes('Maya Chen')"), true);
+  assert.equal(await evaluate("document.querySelector('#resources').textContent.includes('Voided')"), true);
+  await screenshot("desktop-external-recovered");
+
+  // Real HTTP/UI workflow against the explicitly fake GitHub provider.
+  await send("Page.navigate", { url: base + "/github" });
+  await waitFor("document.querySelector('#gh-repo').textContent === 'Tusharkshahi/TaskMind' && !document.querySelector('#gh-new').disabled", "GitHub fixture setup");
+  await evaluate(`document.querySelector('#gh-intent-input').value = 'TaskMind due-date milestone';
+    document.querySelector('#gh-task-input').value = 'Add due-date validation\\nCover overdue-task sorting';
+    document.querySelector('#gh-confirm').value = 'Tusharkshahi/TaskMind';
+    document.querySelector('#gh-authorize').requestSubmit();`);
+  await waitFor("!document.querySelector('#gh-work').hidden && document.querySelectorAll('#gh-issues .resource-card').length === 2", "authorized task manifest");
+  const githubRun = await evaluate("document.querySelector('#gh-run-id').textContent");
+  await click("#gh-create");
+  await waitFor("document.querySelectorAll('#gh-issues a').length === 2 && !document.querySelector('#gh-preview').disabled", "created fixture issues");
+  const kickoff = await ownedRequest(`/api/github/runs/${githubRun}`, undefined, "human");
+  assert.deepEqual(kickoff.tasks.map(task => task.title), ["Add due-date validation", "Cover overdue-task sorting"]);
+  const adoptedNumber = kickoff.actions[1].number;
+  await ownedRequest("/__fixture__/adopt", {
+    number: adoptedNumber, title: "Human-owned: overdue-task sorting",
+  }, "human");
+  await click("#gh-preview");
+  await waitFor("document.querySelector('#gh-plan').textContent.includes('preserve') && !document.querySelector('#gh-plan button[data-action=\"approve\"]').disabled", "preserved adopted issue");
+  await click('#gh-plan button[data-action="approve"]');
+  await waitFor("!document.querySelector('#gh-error').hidden && !document.querySelector('#gh-plan button[data-action=\"approve\"]').disabled", "non-atomic acknowledgment required");
+  assert.equal(await evaluate("document.querySelector('#gh-plan-status').textContent"), "draft");
+  await evaluate("document.querySelector('#gh-ack').checked = true");
+  await click('#gh-plan button[data-action="approve"]');
+  await waitFor("document.querySelector('#gh-plan-status').textContent === 'approved' && !document.querySelector('#gh-plan button[data-action=\"execute\"]').disabled", "GitHub exact plan approved");
+  const githubApproved = await ownedRequest(`/api/github/runs/${githubRun}`, undefined, "human");
+  assert(githubApproved.actions.every(action => action.observed.state === "open"),
+    "Approval alone must not close GitHub issues.");
+  await click('#gh-plan button[data-action="execute"]');
+  await waitFor("document.querySelector('#gh-plan-status').textContent === 'applied' && !document.querySelector('#gh-export').disabled", "GitHub bounded recovery");
+  const recoveredGitHub = await ownedRequest(`/api/github/runs/${githubRun}`, undefined, "human");
+  assert.equal(recoveredGitHub.actions[0].observed.state, "closed");
+  assert.equal(recoveredGitHub.actions[1].observed.state, "open");
+  assert.equal(recoveredGitHub.actions[1].observed.title, "Human-owned: overdue-task sorting");
+  await screenshot("desktop-github-fixture-recovered");
+  await click("#gh-export");
+  const githubExport = join(directory, `countermand-${githubRun}-github.json`);
+  await until(() => existsSync(githubExport), "GitHub evidence download");
+  const githubEvidence = JSON.parse(readFileSync(githubExport, "utf8"));
+  assert.equal(githubEvidence.verification.atomic_recovery_guaranteed, false);
+  assert(githubEvidence.verification.checks.every(check => check.passed));
+  for (const width of [390, 360]) {
+    await send("Emulation.setDeviceMetricsOverride", {
+      width, height: 844, deviceScaleFactor: 1, mobile: true,
+    });
+    assert.equal(await evaluate("document.documentElement.scrollWidth <= window.innerWidth"), true,
+      `GitHub workspace must not overflow at ${width}px.`);
+  }
+  await screenshot("mobile-github-fixture-recovered");
+  await send("Page.reload");
+  await waitFor("document.querySelector('#gh-plan-status').textContent === 'applied'", "GitHub reload persistence");
   assert.deepEqual(errors, [], `Browser errors: ${JSON.stringify(errors)}`);
-  console.log("PASS: desktop, recovery, conflict, mobile (390/360), dialogs, and persistence.");
+  console.log("PASS: desktop/mobile, local/external recovery, approval-only controls, handoff copy, GitHub task manifests, preservation, evidence, and persistence.");
   console.log(`Screenshots: ${directory}`);
 } catch (error) {
   if (sessionId) await screenshot("failure").catch(() => {});

@@ -99,7 +99,8 @@ class Recovery(Workflow):
                 body["id"], run_id, digest, encode(body), "draft", None, None,
             ))
             self.event(db, run_id, "recovery", "plan", "Recovery plan prepared",
-                       "Exact operations and field versions are bound to this plan.")
+                       "Exact operations and field versions are bound to this plan. "
+                       "New forward actions are frozen.")
         return self.snapshot(run_id)
 
     @staticmethod

@@ -69,7 +69,8 @@ class ServerTests(unittest.TestCase):
     def test_health_does_not_claim_switch_is_connected(self):
         status, data, _ = self.request("GET", "/health", role=None)
         self.assertEqual(status, 200)
-        self.assertFalse(json.loads(data)["switch_connected"])
+        self.assertIsNone(json.loads(data)["switch_connected"])
+        self.assertEqual(json.loads(data)["switch_status"], "not_monitored")
 
     def test_agent_cannot_create_run_or_impersonate_owner(self):
         status, _, _ = self.request("POST", "/api/runs", {}, role="sales")
@@ -118,6 +119,42 @@ class ServerTests(unittest.TestCase):
                                    {"kind": "discount"}, role="sales")
         self.assertEqual(status, 200)
 
+    def test_recovery_preview_freezes_new_forward_actions_but_not_receipt_retries(self):
+        run_id = self.create_run("switch")
+        self.assertEqual(self.request("POST", f"/api/runs/{run_id}/actions",
+                                      {"kind": "discount"}, role="sales")[0], 200)
+        self.assertEqual(self.request("POST", f"/api/runs/{run_id}/plans",
+                                      {}, role="operations")[0], 201)
+        self.assertEqual(self.request("POST", f"/api/runs/{run_id}/actions",
+                                      {"kind": "discount"}, role="sales")[0], 200)
+        status, data, _ = self.request("POST", f"/api/runs/{run_id}/actions",
+                                       {"kind": "invoice"}, role="operations")
+        self.assertEqual(status, 400)
+        self.assertIn("frozen", json.loads(data)["error"])
+        _, data, _ = self.request("GET", f"/api/runs/{run_id}")
+        self.assertEqual(len(json.loads(data)["actions"]), 1)
+
+    def test_github_authorization_records_human_defined_manifest_and_rejects_agent_authorization(self):
+        with patch.object(self.server.github, "writes_enabled", True), \
+                patch.object(self.server.github, "client") as client:
+            client.repo = "Tusharkshahi/TaskMind"
+            client.configured = True
+            body = {
+                "confirmation": client.repo, "intent": "Due-date milestone",
+                "tasks": [{"title": "Add due-date validation"}, {"title": "Test overdue sorting"}],
+            }
+            status, _, _ = self.request("POST", "/api/github/runs", body, role="sales")
+            self.assertEqual(status, 403)
+            client.inspect_repo.assert_not_called()
+            status, data, _ = self.request("POST", "/api/github/runs", body)
+            self.assertEqual(status, 201)
+            state = json.loads(data)
+            self.assertEqual(state["intent"], "Due-date milestone")
+            self.assertEqual([t["title"] for t in state["tasks"]],
+                             ["Add due-date validation", "Test overdue sorting"])
+            self.assertTrue(state["settings"]["supports_task_manifest"])
+            client.inspect_repo.assert_called_once()
+
     def test_complete_browser_api_workflow(self):
         run_id = self.create_run()
         for kind, owner in (("discount", "sales"), ("invoice", "operations"),
@@ -143,6 +180,37 @@ class ServerTests(unittest.TestCase):
         self.assertFalse(evidence["verification"]["fully_reversed"])
         self.assertEqual(evidence["workflow"]["resources"]["crm"]["contact"], "Maya Chen")
         self.assertNotIn(self.server.keys["sales"], data.decode())
+
+    def test_external_approval_does_not_execute_or_grant_human_owner_access(self):
+        run_id = self.create_run("switch")
+        for kind, role in (("discount", "sales"), ("invoice", "operations"),
+                           ("message", "operations")):
+            status, _, _ = self.request("POST", f"/api/runs/{run_id}/actions",
+                                       {"kind": kind}, role=role)
+            self.assertEqual(status, 200)
+        self.request("POST", f"/api/runs/{run_id}/human-edit",
+                     {"field": "contact", "value": "Maya Chen"})
+        _, data, _ = self.request("POST", f"/api/runs/{run_id}/plans", {}, role="operations")
+        plan = json.loads(data)["plan"]
+        payload = {"digest": plan["digest"]}
+        status, data, _ = self.request("POST", f"/api/plans/{plan['id']}/approve", payload)
+        self.assertEqual(status, 200)
+        approved = json.loads(data)
+        self.assertEqual(approved["plan"]["status"], "approved")
+        self.assertEqual(approved["resources"]["crm"]["discount"], 30)
+        self.assertEqual(approved["resources"]["billing"]["status"], "draft")
+        self.assertTrue(all(a["recovery"] == "pending" for a in approved["actions"]))
+        status, _, _ = self.request("POST", f"/api/plans/{plan['id']}/execute",
+                                   {**payload, "owner": "sales"})
+        self.assertEqual(status, 403)
+        for role in ("operations", "sales"):
+            status, _, _ = self.request("POST", f"/api/plans/{plan['id']}/execute",
+                                       payload, role=role)
+            self.assertEqual(status, 200)
+        _, data, _ = self.request("GET", f"/api/runs/{run_id}/evidence")
+        evidence = json.loads(data)
+        self.assertTrue(evidence["verification"]["all_supported_repairs_verified"])
+        self.assertEqual(evidence["workflow"]["resources"]["crm"]["contact"], "Maya Chen")
 
     def test_state_change_returns_http_conflict(self):
         run_id = self.create_run()

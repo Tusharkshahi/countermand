@@ -1,7 +1,9 @@
 import copy
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from countermand.github_recovery import GitHubRecovery
 from countermand.package import source_files
@@ -85,6 +87,78 @@ class GitHubTests(unittest.TestCase):
             self.engine.create_issue(self.run_id, 3, "sales")
         with self.assertRaises(PermissionError):
             self.engine.create_issue(self.run_id, 0, "operations")
+
+    def test_actual_task_manifest_is_persisted_and_used_without_agent_rewriting(self):
+        tasks = [{"title": " Add due-date validation ", "body": "Reject invalid dates."},
+                 {"title": "Cover overdue task sorting"}]
+        run = self.engine.authorize(self.client.repo, "human", tasks, "Due-date milestone")
+        tasks[0]["title"] = "Changed outside the stored manifest"
+        self.assertEqual(run["intent"], "Due-date milestone")
+        self.assertEqual(run["tasks"][0]["title"], "Add due-date validation")
+        self.assertEqual(run["tasks"][1]["body"], "")
+        self.engine.create_issue(run["id"], 0, "sales")
+        self.engine.create_issue(run["id"], 1, "sales")
+        self.assertEqual(self.client.issues[10]["title"], "Add due-date validation")
+        self.assertIn("Reject invalid dates.", self.client.issues[10]["body"])
+        self.assertIn("Workflow: Due-date milestone", self.client.issues[10]["body"])
+        self.assertEqual(self.client.issues[11]["title"], "Cover overdue task sorting")
+        with self.assertRaisesRegex(ValueError, "manifest"):
+            self.engine.create_issue(run["id"], 2, "sales")
+        self.assertEqual(len(self.client.issues), 2)
+        plan = self.engine.prepare(run["id"])["plan"]
+        self.approve(plan)
+        self.engine.execute(plan["id"], plan["digest"], "sales")
+        self.assertEqual(self.client.closes, [10, 11])
+
+    def test_one_task_workflow_does_not_wait_for_nonexistent_slots(self):
+        run = self.engine.authorize(self.client.repo, "human",
+                                    [{"title": "Review task export acceptance criteria"}])
+        self.engine.create_issue(run["id"], 0, "sales")
+        plan = self.engine.prepare(run["id"])["plan"]
+        self.assertEqual(len(plan["body"]["items"]), 1)
+        self.approve(plan)
+        self.engine.execute(plan["id"], plan["digest"], "sales")
+        self.assertEqual(self.client.closes, [10])
+
+    def test_invalid_manifests_are_refused_before_network_access(self):
+        invalid = [
+            [], "not a task list", [{"title": "Task"}] * 4,
+            [{"title": ""}], [{"title": "x" * 121}], [{"title": "a\nb"}],
+            [{"title": 12}], [{"title": "Task", "body": None}],
+            [{"title": "Task", "body": "x" * 4001}],
+            [{"title": "Task", "owner": "operations"}],
+        ]
+        with patch.object(self.client, "inspect_repo") as inspect:
+            for tasks in invalid:
+                with self.subTest(tasks=str(tasks)[:50]):
+                    with self.assertRaises(ValueError):
+                        self.engine.authorize(self.client.repo, "human", tasks)
+            with self.assertRaises(ValueError):
+                self.engine.authorize(self.client.repo, "human", intent="a\nb")
+            inspect.assert_not_called()
+        self.assertEqual(len(self.client.issues), 0)
+
+    def test_only_human_may_authorize_task_manifest(self):
+        with self.assertRaises(PermissionError):
+            self.engine.authorize(self.client.repo, "sales", [{"title": "Task"}])
+
+    def test_old_pilot_database_migrates_without_changing_or_removing_runs(self):
+        legacy_path = Path(self.directory.name) / "legacy.sqlite3"
+        legacy_id = "ghrun_abcdef123456"
+        with sqlite3.connect(legacy_path) as db:
+            db.execute("CREATE TABLE gh_runs (id TEXT PRIMARY KEY, repo TEXT NOT NULL, "
+                       "created_at TEXT NOT NULL, authorized_by TEXT NOT NULL, authorization TEXT NOT NULL)")
+            db.execute("INSERT INTO gh_runs VALUES (?,?,?,?,?)",
+                       (legacy_id, self.client.repo, "original-date", "human", "original-consent"))
+        migrated = GitHubRecovery(legacy_path, self.client, writes_enabled=True)
+        state = migrated.snapshot(legacy_id)
+        self.assertEqual(state["created_at"], "original-date")
+        self.assertEqual(state["authorization"], "original-consent")
+        self.assertEqual(state["intent"], "Project kickoff")
+        self.assertEqual(len(state["tasks"]), 3)
+        self.assertEqual(state["actions"], [])
+        migrated.authorize(self.client.repo, "human", [{"title": "A new, explicit task"}])
+        self.assertEqual(len(migrated.list_runs()), 2)
 
     def test_changed_issue_is_preserved_and_untouched_issues_closed(self):
         self.create()

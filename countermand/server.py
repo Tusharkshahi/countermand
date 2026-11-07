@@ -1,4 +1,4 @@
-"""Loopback-only web workbench and role-scoped synthetic adapter API."""
+"""Loopback-only recovery workbench and role-scoped adapter API."""
 
 import argparse
 import hmac
@@ -131,7 +131,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise PermissionError("This workbench only serves its loopback host")
             path = urlsplit(self.path).path
             if path == "/health":
-                return self._send(200, {"status": "ok", "switch_connected": False})
+                return self._send(200, {"status": "ok", "switch_connected": None,
+                                        "switch_status": "not_monitored"})
             files = {"/": "index.html", "/app.js": "app.js", "/view.js": "view.js",
                      "/styles.css": "styles.css",
                      "/favicon.svg": "favicon.svg", "/github": "github.html",
@@ -146,7 +147,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(*github_result)
             if path == "/api/runs":
                 return self._send(200, {"runs": self.server.engine.list_runs(),
-                                        "switch_connected": False, "role": role})
+                                        "switch_connected": None,
+                                        "switch_status": "not_monitored", "role": role})
             parts = path.strip("/").split("/")
             if len(parts) == 3 and parts[:2] == ["api", "runs"]:
                 return self._send(200, self.server.engine.snapshot(parts[2]))
@@ -234,7 +236,7 @@ def main():
     server = Workbench(("127.0.0.1", args.port), args.state_dir, args.browser_origin,
                        args.github_writes)
     print(f"Countermand: http://127.0.0.1:{args.port}", flush=True)
-    print("Switch is not connected. The CRM/mail rehearsal is synthetic; no real mail or payments.", flush=True)
+    print("Switch liveness is not monitored here. CRM/mail data is synthetic; no real mail or payments.", flush=True)
     print("GitHub issue writes: " + ("ENABLED; exact repository confirmation still required."
                                     if args.github_writes else "disabled (default)."), flush=True)
     try:

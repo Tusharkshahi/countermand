@@ -14,6 +14,26 @@ ISSUES = (
 )
 
 
+def validate_tasks(tasks):
+    if tasks is None:
+        tasks = [{"title": title, "body": body} for title, body in ISSUES]
+    if not isinstance(tasks, list) or not 1 <= len(tasks) <= 3:
+        raise ValueError("Authorize between one and three task definitions")
+    result = []
+    for task in tasks:
+        if (not isinstance(task, dict) or "title" not in task
+                or set(task) - {"title", "body"}):
+            raise ValueError("Each task accepts only a title and optional body")
+        title, body = task["title"], task.get("body", "")
+        if (not isinstance(title, str) or not 1 <= len(title.strip()) <= 120
+                or "\n" in title or "\r" in title):
+            raise ValueError("Task titles must be single-line text of 1 to 120 characters")
+        if not isinstance(body, str) or len(body) > 4000:
+            raise ValueError("Task bodies must contain at most 4000 characters")
+        result.append({"title": title.strip(), "body": body.strip()})
+    return result
+
+
 class GitHubWorkflow(Store):
     def __init__(self, path, client, writes_enabled=False):
         super().__init__(path)
@@ -24,7 +44,12 @@ class GitHubWorkflow(Store):
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS gh_runs (
                     id TEXT PRIMARY KEY, repo TEXT NOT NULL, created_at TEXT NOT NULL,
-                    authorized_by TEXT NOT NULL, authorization TEXT NOT NULL
+                    authorized_by TEXT NOT NULL, authorization TEXT NOT NULL,
+                    intent TEXT NOT NULL DEFAULT 'Project kickoff'
+                );
+                CREATE TABLE IF NOT EXISTS gh_tasks (
+                    run_id TEXT NOT NULL REFERENCES gh_runs(id), slot INTEGER NOT NULL,
+                    title TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY (run_id, slot)
                 );
                 CREATE TABLE IF NOT EXISTS gh_actions (
                     id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES gh_runs(id),
@@ -43,11 +68,17 @@ class GitHubWorkflow(Store):
                     title TEXT NOT NULL, detail TEXT NOT NULL, created_at TEXT NOT NULL
                 );
             """)
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(gh_runs)")}
+            if "intent" not in columns:
+                db.execute("ALTER TABLE gh_runs ADD COLUMN intent TEXT NOT NULL "
+                           "DEFAULT 'Project kickoff'")
 
     def status(self):
         return {
             "repo": self.client.repo, "configured": self.client.configured,
-            "writes_enabled": self.writes_enabled, "switch_connected": False,
+            "writes_enabled": self.writes_enabled, "switch_connected": None,
+            "switch_status": "not_monitored",
+            "supports_task_manifest": True,
             "scope": "At most three new issues per explicitly authorized run. No code changes.",
             "limitation": "GitHub recovery rechecks state before each close, but is not "
                           "a verified atomic compare-and-close. Pause collaborators during execution.",
@@ -58,19 +89,30 @@ class GitHubWorkflow(Store):
             raise PermissionError("Live writes are disabled. Configure GitHub and explicitly "
                                   "start the server with --github-writes.")
 
-    def authorize(self, confirmation, actor):
+    def authorize(self, confirmation, actor, tasks=None, intent="Project kickoff"):
         self.require_writes()
+        if actor != "human":
+            raise PermissionError("Only a human may authorize the immutable task manifest")
         if confirmation != self.client.repo:
-            raise ValueError("Type the exact configured owner/repository to authorize three new issues")
+            raise ValueError("Type the exact configured owner/repository to authorize new issues")
+        tasks = validate_tasks(tasks)
+        if (not isinstance(intent, str) or not 1 <= len(intent.strip()) <= 200
+                or "\n" in intent or "\r" in intent):
+            raise ValueError("Workflow intent must be single-line text of 1 to 200 characters")
         self.client.inspect_repo()
         run_id = identifier("ghrun")
         with self.transaction() as db:
-            db.execute("INSERT INTO gh_runs VALUES (?,?,?,?,?)", (
+            db.execute("INSERT INTO gh_runs(id,repo,created_at,authorized_by,authorization,intent) "
+                       "VALUES (?,?,?,?,?,?)", (
                 run_id, self.client.repo, now(), actor,
-                "Create at most three marked demo issues. Existing issues and code are out of scope.",
+                f"Create exactly {len(tasks)} issues from the immutable task manifest. "
+                "Existing issues and code are out of scope.", intent.strip(),
             ))
+            for slot, task in enumerate(tasks):
+                db.execute("INSERT INTO gh_tasks VALUES (?,?,?,?)",
+                           (run_id, slot, task["title"], task["body"]))
             self.log(db, run_id, actor, "Live pilot authorized",
-                     f"Only newly tracked issues in {self.client.repo}; no code changes.")
+                     f"{len(tasks)} approved tasks in {self.client.repo}; no code changes.")
         return self.snapshot(run_id)
 
     @staticmethod
@@ -86,6 +128,12 @@ class GitHubWorkflow(Store):
             raise ValueError("Run not found for the configured repository")
         return dict(row)
 
+    @staticmethod
+    def tasks(db, run_id):
+        rows = db.execute("SELECT title,body FROM gh_tasks WHERE run_id=? ORDER BY slot",
+                          (run_id,)).fetchall()
+        return [dict(row) for row in rows] if rows else validate_tasks(None)
+
     def create_issue(self, run_id, slot, actor):
         self.require_writes()
         if actor not in ("sales", "human"):
@@ -94,7 +142,10 @@ class GitHubWorkflow(Store):
             raise ValueError("Choose a slot from 0 to 2")
         with self.lock:
             with self.transaction() as db:
-                self.run(db, run_id)
+                run = self.run(db, run_id)
+                tasks = self.tasks(db, run_id)
+                if slot >= len(tasks):
+                    raise ValueError("This slot is not in the human-authorized task manifest")
                 prior = db.execute("SELECT * FROM gh_actions WHERE run_id=? AND slot=?",
                                    (run_id, slot)).fetchone()
                 if prior and prior["status"] == "recorded":
@@ -105,13 +156,15 @@ class GitHubWorkflow(Store):
                 action_id = identifier("ghact")
                 db.execute("INSERT INTO gh_actions(id,run_id,slot,status) VALUES (?,?,?,'pending')",
                            (action_id, run_id, slot))
-            title, text = ISSUES[slot]
+            title, text = tasks[slot]["title"], tasks[slot]["body"]
             marker = f"<!-- countermand:{run_id}:{slot} -->"
-            body = (f"{text}\n\nCountermand hackathon sandbox issue. Created only for this "
-                    f"authorized run; do not use for production work.\n\n{marker}")
+            body = (f"{text}\n\n---\nWorkflow: {run['intent']}\n"
+                    f"Tracked by Countermand under an explicit human authorization.\n\n{marker}")
             try:
-                issue = self.client.create_issue(f"[Countermand] {title}", body)
-                if (not issue.get("number") or not issue.get("id")
+                issue = self.client.create_issue(title, body)
+                if (type(issue.get("number")) is not int or issue["number"] < 1
+                        or type(issue.get("id")) is not int or issue["id"] < 1
+                        or issue.get("title") != title or not issue.get("html_url")
                         or marker not in (issue.get("body") or "")
                         or issue.get("state") != "open"):
                     raise ValueError("GitHub did not return an intact issue receipt")
@@ -133,6 +186,7 @@ class GitHubWorkflow(Store):
 
     def snapshot_unlocked(self, db, run_id):
         result = self.run(db, run_id)
+        result["tasks"] = self.tasks(db, run_id)
         result["actions"] = [
             {**dict(row), "baseline": json.loads(row["baseline"]) if row["baseline"] else None,
              "observed": json.loads(row["observed"]) if row["observed"] else None}
@@ -156,7 +210,7 @@ class GitHubWorkflow(Store):
     def list_runs(self):
         with self.transaction() as db:
             return [dict(row) for row in db.execute(
-                "SELECT id,repo,created_at FROM gh_runs WHERE repo=? ORDER BY rowid DESC",
+                "SELECT id,repo,created_at,intent FROM gh_runs WHERE repo=? ORDER BY rowid DESC",
                 (self.client.repo,),
             )]
 

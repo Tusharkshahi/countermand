@@ -14,11 +14,11 @@ class GitHubRecovery(GitHubWorkflow):
     def prepare(self, run_id):
         with self.lock:
             state = self.inspect(run_id)
-            if len(state["actions"]) != 3 or any(
+            if len(state["actions"]) != len(state["tasks"]) or any(
                 a["status"] != "recorded" or a["recovery"] in ("closing", "unknown")
                 for a in state["actions"]
             ):
-                raise ValueError("All three issue receipts must be known before recovery. "
+                raise ValueError("All authorized issue receipts must be known before recovery. "
                                  "An uncertain write requires manual investigation.")
             items = []
             for action in state["actions"]:
@@ -31,7 +31,7 @@ class GitHubRecovery(GitHubWorkflow):
                     "observed": current,
                     "reason": {
                         "close": "Unchanged since this run created it. Propose closing, not deleting.",
-                        "preserve": "Changed since creation. Preserve the human-adopted work.",
+                        "preserve": "Changed since creation. Preserve newer work; ask the owner before closing.",
                         "blocked": "Identity mismatch. Do not touch.",
                         "already_closed": "Already closed outside this recovery. No write needed.",
                         "completed": "Previously closed by this recovery. No repeat write.",
@@ -183,7 +183,7 @@ class GitHubRecovery(GitHubWorkflow):
             "verification": {
                 "checked_at": now(), "checks": checks,
                 "fully_reversed": False, "atomic_recovery_guaranteed": False,
-                "switch_connected": False,
+                "switch_connected": None, "switch_status": "not_monitored",
                 "residuals": state["plan"]["body"]["residuals"] if state["plan"] else [],
             },
         }

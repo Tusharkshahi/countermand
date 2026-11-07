@@ -1,4 +1,10 @@
+import json
+import os
+import subprocess
+import sys
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from countermand.mcp import Adapter, dispatch
@@ -23,8 +29,36 @@ class MCPTests(unittest.TestCase):
                     "http://localhost:8787?forward=somewhere"):
             with self.assertRaises(ValueError):
                 Adapter(url, "token", "sales")
-        with self.assertRaises(ValueError):
-            Adapter("http://localhost:8787", None, "sales")
+        for token in (None, "", " ", 12, True):
+            with self.assertRaises(ValueError):
+                Adapter("http://localhost:8787", token, "sales")
+
+    def test_stdio_process_discovers_tools_with_windows_bom_credential_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            credentials = Path(directory) / "role.json"
+            credentials.write_text(json.dumps({"sales": "private-test-sales-key"}),
+                                   encoding="utf-8-sig")
+            messages = [
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                 "params": {"protocolVersion": "2025-06-18"}},
+                {"jsonrpc": "2.0", "method": "notifications/initialized"},
+                {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+            ]
+            env = dict(os.environ)
+            env.pop("COUNTERMAND_ADAPTER_TOKEN", None)
+            result = subprocess.run(
+                [sys.executable, str(Path(__file__).resolve().parents[1] / "countermand" / "mcp.py"),
+                 "--role", "sales", "--credential-file", str(credentials)],
+                input="\n".join(json.dumps(m) for m in messages) + "\n",
+                text=True, capture_output=True, env=env, timeout=5,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            responses = [json.loads(line) for line in result.stdout.splitlines()]
+            self.assertEqual([r["id"] for r in responses], [1, 2])
+            names = {tool["name"] for tool in responses[1]["result"]["tools"]}
+            self.assertIn("apply_demo_discount", names)
+            self.assertNotIn("create_demo_invoice", names)
+            self.assertNotIn("private-test-sales-key", result.stdout + result.stderr)
 
     def test_owner_cannot_select_another_owners_tool(self):
         with self.assertRaisesRegex(ValueError, "not available"):

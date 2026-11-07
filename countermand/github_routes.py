@@ -21,8 +21,9 @@ def post_github(server, parts, body, role):
     pilot = server.github
     if parts == ["api", "github", "runs"]:
         if role != "human":
-            raise PermissionError("A human must authorize creation of the three sandbox issues")
-        return 201, pilot.authorize(body.get("confirmation"), role)
+            raise PermissionError("A human must authorize creation of the new tracked issues")
+        return 201, pilot.authorize(body.get("confirmation"), role, body.get("tasks"),
+                                    body.get("intent", "Project kickoff"))
     if len(parts) == 5 and parts[:3] == ["api", "github", "runs"]:
         run_id, operation = parts[3:]
         if operation == "issues":

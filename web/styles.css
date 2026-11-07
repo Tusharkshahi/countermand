@@ -32,7 +32,7 @@ button, select { cursor: pointer; }
 button { color: inherit; }
 button:disabled { cursor: not-allowed; opacity: .4; }
 button:not(:disabled), a { transition: background .18s, color .18s, border-color .18s; }
-button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible {
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible {
   outline: 3px solid #9bb577; outline-offset: 4px;
 }
 button:disabled:hover { transform: none; }
@@ -169,9 +169,16 @@ select { font-size: 10px; max-width: 125px; border: 0; border-left: 1px solid va
 .footer-separator { margin: 0 5px; color: #c8cec0; }
 .gh-setup { margin: 24px 0; padding: 22px; border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); }
 .gh-setup h2 { font-size: 17px; font-weight: 500; margin: 0 0 7px; }
+.gh-setup summary { cursor: pointer; }
+.gh-setup summary h2 { display: inline; margin: 0; }
+.gh-setup[open] summary { margin-bottom: 15px; }
 .gh-setup p, .gh-caption, .gh-adoption { color: var(--muted); font-size: 11px; line-height: 1.8; }
 #gh-authorize { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 18px; }
 #gh-authorize input { flex: 1; min-width: 180px; width: auto; }
+.gh-manifest-fields { display: grid; gap: 10px; width: 100%; margin-bottom: 12px; }
+.gh-manifest-fields input, .gh-manifest-fields textarea { width: 100%; min-width: 0; }
+.gh-manifest-fields textarea { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; font-size: 12px; line-height: 1.8; resize: vertical; }
+.gh-runline b { font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
 .gh-runline { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 12px 0; }
 .gh-runline code { font-size: 12px; }
 .gh-runline > span { color: var(--muted); font-size: 10px; }
@@ -180,6 +187,11 @@ select { font-size: 10px; max-width: 125px; border: 0; border-left: 1px solid va
 .gh-issue-title { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .gh-issue-title a { text-decoration-color: #d5ddca; text-underline-offset: 3px; }
 .gh-adoption { padding: 12px 16px; background: var(--green-light); border-radius: 8px; margin-top: 18px; }
+#gh-issues[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
+#gh-issues[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 600px) {
+  #gh-issues[data-count] { grid-template-columns: minmax(0, 1fr); }
+}
 
 dialog { border: 1px solid var(--line); border-radius: 17px; padding: 29px; width: min(470px, calc(100% - 32px)); color: var(--ink); background: var(--surface); box-shadow: 0 22px 90px #26342e20; }
 dialog::backdrop { background: #26342e35; backdrop-filter: blur(4px); }

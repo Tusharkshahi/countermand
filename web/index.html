@@ -20,7 +20,7 @@
     <span class="header-label">Recovery workspace</span>
     <div class="header-actions">
       <a class="text-button" href="/github">GitHub pilot &nearr;</a>
-      <span class="environment"><span class="status-dot"></span>Local rehearsal</span>
+      <span class="environment"><span class="status-dot"></span><span id="execution-mode">Local rehearsal</span></span>
       <button class="text-button" id="switch-setup">Switch setup <span aria-hidden="true">&#8599;</span></button>
     </div>
   </header>
@@ -37,6 +37,7 @@
           <span id="run-label">Run rehearsal</span><span aria-hidden="true">&#8599;</span>
         </button>
         <span class="quiet-caption">Synthetic data. Real state changes.</span>
+        <button class="text-button" id="new-agent-run" title="Create an empty externally driven run; no adapter actions are executed">Create agent run</button>
       </div>
     </section>
 
@@ -48,6 +49,9 @@
       <div class="workflow-meta">
         <span class="workflow-status" id="workflow-status">Ready to rehearse</span>
         <select id="run-select" aria-label="Select a saved rehearsal"></select>
+        <button class="icon-button" id="copy-run" aria-label="Copy selected run ID" title="Copy run ID for the Switch room">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="6" y="6" width="10" height="11" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M12 6V3H3v10h3" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+        </button>
         <button class="icon-button" id="export" aria-label="Export workflow evidence" title="Export evidence">
           <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v9m-3-3 3 3 3-3M4 12v4h12v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
@@ -89,7 +93,7 @@
 
     <footer class="workspace-footer">
       <span>Built for decisions that deserve a second look.</span>
-      <span><span class="status-dot neutral"></span>Switch not connected<span class="footer-separator">/</span>Local adapters only</span>
+      <span title="Switch Console manages the room connection. This application does not probe its liveness."><span class="status-dot neutral"></span><span id="adapter-status">Local rehearsal</span><span class="footer-separator">/</span>Switch status not monitored</span>
     </footer>
   </main>
 
@@ -112,14 +116,14 @@
   </dialog>
 
   <dialog id="switch-dialog" aria-labelledby="switch-title">
-    <div class="dialog-heading"><span class="overline">THE NEXT MILESTONE</span><button class="icon-button dialog-close" type="button" aria-label="Close">&times;</button></div>
-    <h2 id="switch-title">Local proof. Then live agents.</h2>
-    <p>This workspace is a working recovery rehearsal. The actions are real local changes, but no AI agents or Switch server are connected yet.</p>
+    <div class="dialog-heading"><span class="overline">COLLABORATION AND EVIDENCE</span><button class="icon-button dialog-close" type="button" aria-label="Close">&times;</button></div>
+    <h2 id="switch-title">Two surfaces. One workflow.</h2>
+    <p>Switch Console connects agents to the room. Countermand exposes scoped business tools and records their effects. This UI shows the selected run's mode and receipts; it does not monitor Switch's connection.</p>
     <ol class="setup-list">
-      <li><b>Install Switch Console</b><span>Use its local server and bundled Mattermost.</span></li>
-      <li><b>Bring a supported coding agent</b><span>Use an existing Claude Code, Codex, or other supported account.</span></li>
+      <li><b>Connect a Switch room</b><span>Use Slack, bundled Mattermost, or another supported messaging app.</span></li>
+      <li><b>Bring a supported coding agent</b><span>Cursor Agent CLI, Codex, and other supported providers can call the scoped MCP tools.</span></li>
       <li><b>Connect the two owning agents</b><span>Sales owns CRM changes. Operations owns billing and messaging.</span></li>
-      <li><b>Run the same scenario in a room</b><span>Coordinate and approve through Switch; inspect evidence here.</span></li>
+      <li><b>Review before agents recover</b><span>Coordinate in the room, approve the exact plan locally, then have each owning agent execute its repairs.</span></li>
     </ol>
     <a class="button button-primary setup-link" href="https://docs.switchagents.ai/switch-rooms/getting-started" target="_blank" rel="noopener noreferrer">Open Switch quickstart <span aria-hidden="true">&#8599;</span></a>
     <p class="field-help">The repository's switch/README.md documents the integration boundary. Never put adapter credentials in a shared room.</p>

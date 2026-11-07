@@ -103,7 +103,9 @@ export function workflowStatus(state) {
   }
   if (state.plan?.status === "approved") return "Recovery approved";
   if (state.plan?.status === "draft") return "Awaiting your review";
-  return state.actions.length ? "Workflow completed" : "Ready to rehearse";
+  if (state.actions.length === 3) return "Workflow completed";
+  if (state.actions.length) return "Workflow in progress";
+  return state.mode === "rehearsal" ? "Ready to rehearse" : "Awaiting agents";
 }
 
 export function renderPlan(state, busy) {
@@ -115,7 +117,7 @@ export function renderPlan(state, busy) {
       <p>See what can be restored, what must be preserved, and what cannot be undone.</p>
     </div>
     <button class="button button-primary plan-button" data-action="prepare" ${!state.actions.length || busy ? "disabled" : ""}>Preview recovery <span aria-hidden="true">&rarr;</span></button>
-    <p class="plan-footnote">A preview changes nothing. You decide what runs.</p>`;
+    <p class="plan-footnote">No service fields change. Previewing freezes new forward actions for this run.</p>`;
   }
   const outcomes = Object.fromEntries(state.actions.map((a) => [a.id, a.recovery]));
   const items = plan.body.items.map((item) => {
@@ -133,8 +135,12 @@ export function renderPlan(state, busy) {
     control = `<div class="applied-note">The underlying state changed. This approval cannot be reused. Preview a fresh plan before continuing.</div><button class="button button-primary plan-button" data-action="prepare" ${busy ? "disabled" : ""}>Review fresh state &rarr;</button>`;
   } else if (plan.status === "applied") {
     control = `<div class="applied-note">Recovery is recorded, not a clean rewind. The original notice is still delivered. Review the correction draft and any blocked items.</div><button class="button button-secondary replan-button" data-action="verify" ${busy ? "disabled" : ""}>Verify current state</button>`;
+  } else if (state.mode !== "rehearsal") {
+    control = plan.status === "approved"
+      ? `<div class="applied-note">Approved. Owning agents must execute through their scoped tools. The browser will not impersonate them.</div><button class="button button-secondary plan-button" data-action="copy-handoff" ${busy ? "disabled" : ""}>Copy agent handoff</button><p class="plan-footnote">Includes this run, exact plan ID, and full fingerprint. No credentials.</p>`
+      : `<button class="button button-primary plan-button" data-action="approve" ${busy ? "disabled" : ""}>${busy ? "Working..." : "Approve exact plan"} <span aria-hidden="true">&rarr;</span></button><p class="plan-footnote">Approval only. No service state changes until the owning agents execute.</p>`;
   } else {
-    control = `<button class="button button-primary plan-button" data-action="recover" ${busy || state.mode !== "rehearsal" ? "disabled" : ""}>${busy ? "Working..." : plan.status === "approved" ? "Continue approved recovery" : "Approve & recover"} <span aria-hidden="true">&rarr;</span></button><p class="plan-footnote">${state.mode === "rehearsal" ? "Local human approval. Only this exact plan may run." : "External mode: owning agents must execute through their scoped tools."}</p>`;
+    control = `<button class="button button-primary plan-button" data-action="recover" ${busy ? "disabled" : ""}>${busy ? "Working..." : plan.status === "approved" ? "Continue approved recovery" : "Approve & recover"} <span aria-hidden="true">&rarr;</span></button><p class="plan-footnote">Local human approval. Only this exact plan may run.</p>`;
   }
   return `${items}${preserved}<div class="plan-signature"><span>PLAN FINGERPRINT</span><code>${e(plan.digest.slice(0, 16))}</code></div>${control}`;
 }

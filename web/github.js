@@ -1,6 +1,6 @@
 import { escapeHtml as e, icon } from "/view.js";
 const $ = (id) => document.getElementById(id);
-let state, settings, busy = false;
+let state, settings, busy = false, setupForRun;
 async function api(path, body) {
   const response = await fetch(`/api/github${path}`, body === undefined ? { cache: "no-store" }
     : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -11,10 +11,15 @@ async function api(path, body) {
 function url(number) { return `https://github.com/${settings.repo}/issues/${Number(number)}`; }
 function render() {
   $("gh-work").hidden = !state;
-  $("gh-new").disabled = busy || !settings?.configured || !settings?.writes_enabled;
+  $("gh-new").disabled = busy || !settings?.configured || !settings?.writes_enabled || !settings?.supports_task_manifest;
   if (!state) return;
+  if (setupForRun !== state.id) {
+    $("gh-setup").open = false;
+    setupForRun = state.id;
+  }
   $("gh-run-id").textContent = state.id;
-  const complete = state.actions.length === 3 && state.actions.every(a => a.status === "recorded");
+  $("gh-intent").textContent = state.intent;
+  const complete = state.actions.length === state.tasks.length && state.actions.every(a => a.status === "recorded");
   const uncertain = state.actions.some(a => a.status !== "recorded" || a.recovery === "unknown");
   $("gh-status").textContent = uncertain ? "Uncertain write / inspect manually" : state.plan?.status || "Authorized / ready";
   $("gh-create").disabled = busy || complete || uncertain || !settings.writes_enabled;
@@ -22,10 +27,14 @@ function render() {
   $("gh-refresh").disabled = busy;
   $("gh-export").disabled = busy || !state.actions.length;
   $("gh-runs").disabled = busy;
-  $("gh-issues").innerHTML = Array.from({ length: 3 }, (_, slot) => {
+  $("gh-issues").dataset.count = state.tasks.length;
+  $("gh-adoption").hidden = !!state.plan;
+  $("gh-issues").innerHTML = state.tasks.map((task, slot) => {
     const action = state.actions.find(a => a.slot === slot);
     const issue = action?.observed;
-    return `<article class="resource-card"><div class="resource-top"><span class="resource-label">Slot ${slot + 1}</span><span class="subtle-badge ${action?.recovery === "closed" ? "green" : ""}">${e(action?.status === "recorded" ? issue.state : action?.status || "Not created")}</span></div><h3 class="gh-issue-title">${issue ? `<a href="${url(action.number)}" target="_blank" rel="noopener noreferrer">#${Number(action.number)} ${e(issue.title)}</a>` : "Awaiting an authorized action"}</h3><p class="resource-detail">${issue ? `${Number(issue.comments || 0)} comments / ${e(action.recovery)}` : "No GitHub issue exists for this slot."}</p></article>`;
+    const preserved = state.plan?.body.items.some(item => item.action_id === action?.id && item.classification === "preserve");
+    const status = action?.status === "recorded" ? preserved ? "Preserved" : issue.state : action?.status || "Not created";
+    return `<article class="resource-card"><div class="resource-top"><span class="resource-label">Task ${slot + 1}</span><span class="subtle-badge ${action?.recovery === "closed" || preserved ? "green" : ""}">${e(status)}</span></div><h3 class="gh-issue-title">${issue ? `<a href="${url(action.number)}" target="_blank" rel="noopener noreferrer">#${Number(action.number)} ${e(issue.title)}</a>` : e(task.title)}</h3><p class="resource-detail">${issue ? `${Number(issue.comments || 0)} comment${issue.comments === 1 ? "" : "s"} / ${preserved ? "newer work left open" : e(action.recovery)}` : "Authorized task. No GitHub issue exists yet."}</p></article>`;
   }).join("");
   $("gh-events").innerHTML = state.events.slice(-7).map(event => `<article class="timeline-event"><span class="event-icon">${icon("check")}</span><div><p class="event-byline">${e(event.actor)}<time>${e(new Date(event.created_at).toLocaleTimeString())}</time></p><h3 class="event-title">${e(event.title)}</h3><p class="event-description">${e(event.detail)}</p></div></article>`).join("");
   const plan = state.plan;
@@ -52,7 +61,7 @@ async function list(selected) {
   const { runs } = await api("/runs");
   $("gh-runs").replaceChildren(...runs.map(run => {
     const option = document.createElement("option");
-    option.value = run.id; option.textContent = run.id.slice(-8); option.selected = run.id === selected;
+    option.value = run.id; option.textContent = `${run.intent.slice(0, 22)} / ${run.id.slice(-6)}`; option.selected = run.id === selected;
     return option;
   }));
   return runs;
@@ -60,12 +69,15 @@ async function list(selected) {
 $("gh-authorize").addEventListener("submit", event => {
   event.preventDefault();
   perform(async () => {
-    state = await api("/runs", { confirmation: $("gh-confirm").value });
+    const tasks = $("gh-task-input").value.split(/\r?\n/).map(title => title.trim()).filter(Boolean).map(title => ({ title }));
+    state = await api("/runs", {
+      confirmation: $("gh-confirm").value, intent: $("gh-intent-input").value, tasks,
+    });
     await list(state.id);
   });
 });
 $("gh-create").addEventListener("click", () => perform(async () => {
-  for (let slot = 0; slot < 3; slot++) {
+  for (let slot = 0; slot < state.tasks.length; slot++) {
     state = await api(`/runs/${state.id}/issues`, { slot }); render();
   }
 }));
@@ -101,6 +113,7 @@ $("gh-export").addEventListener("click", () => perform(async () => {
 }));
 async function start() {
   settings = await api("/status");
+  if (!settings.supports_task_manifest) throw new Error("Restart the Countermand backend after updating; this UI requires task-manifest support.");
   $("gh-repo").textContent = settings.repo;
   $("gh-config-note").textContent = settings.configured
     ? settings.writes_enabled ? "Real issue writes are enabled, but each new run still needs exact repository confirmation."

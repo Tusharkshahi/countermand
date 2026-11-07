@@ -1,4 +1,4 @@
-"""Dependency-free stdio MCP tools for a future Switch-managed coding agent."""
+"""Dependency-free, scoped stdio MCP tools for Switch-managed coding agents."""
 
 import argparse
 import json
@@ -26,7 +26,7 @@ class Adapter:
             raise ValueError("The adapter only connects to a loopback HTTP workbench")
         if role not in ("sales", "operations"):
             raise ValueError("An adapter must be sales or operations")
-        if not token:
+        if not isinstance(token, str) or not token.strip():
             raise ValueError("Set COUNTERMAND_ADAPTER_TOKEN to this adapter's credential")
         self.base_url = base_url.rstrip("/")
         self.token = token
@@ -35,7 +35,8 @@ class Adapter:
     def tools(self):
         definitions = [
             ("inspect_workflow", "Read the shared synthetic workflow ledger.", {"run_id": RUN}),
-            ("prepare_recovery", "Preview an exact recovery plan. Does not approve or execute.",
+            ("prepare_recovery", "Preview an exact recovery plan and freeze new forward work "
+             "for this run. Does not approve or execute repairs.",
              {"run_id": RUN}),
             ("recover_owned_actions", "Execute only this owner's actions in a human-approved "
              "plan. Stale state is refused.", {"plan_id": PLAN, "digest": DIGEST}),
@@ -64,8 +65,9 @@ class Adapter:
         ])
         if self.role == "sales":
             definitions.extend([
-                ("create_github_issue", "REAL WRITE: create one of three bounded, marked issues "
-                 "in a human-authorized run. Never retries an uncertain creation.",
+                ("create_github_issue", "REAL WRITE: create a task from the immutable "
+                 "human-authorized manifest (one to three marked issues per run). "
+                 "Inspect tasks first; never invent an extra slot or retry an uncertain creation.",
                  {"run_id": GH_RUN, "slot": {"type": "integer", "minimum": 0, "maximum": 2}}),
                 ("recover_github_issues", "REAL WRITE: close only unchanged tracked issues in "
                  "an exact human-approved plan. Changed issues are preserved. Not atomic.",
@@ -194,10 +196,13 @@ def main():
     try:
         token = os.environ.get("COUNTERMAND_ADAPTER_TOKEN")
         if not token and args.credential_file:
-            with open(args.credential_file, encoding="utf-8") as handle:
-                token = json.load(handle)[args.role]
+            with open(args.credential_file, encoding="utf-8-sig") as handle:
+                credentials = json.load(handle)
+            if not isinstance(credentials, dict):
+                raise ValueError("The credential file must contain a role-to-token JSON object")
+            token = credentials.get(args.role)
         adapter = Adapter(args.url, token, args.role)
-    except ValueError as error:
+    except (ValueError, OSError) as error:
         parser.error(str(error))
     for line in sys.stdin:
         if len(line) > 1_048_576:

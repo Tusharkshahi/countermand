@@ -44,6 +44,9 @@ class Workflow(Store):
             ).fetchone()
             if exists:
                 return exists["id"]
+            if db.execute("SELECT id FROM plans WHERE run_id=? LIMIT 1", (run_id,)).fetchone():
+                raise ValueError("Recovery has already been planned. New forward actions are "
+                                 "frozen; start a new run for new work.")
             if kind == "discount":
                 updates, label = {"discount": 30}, "Applied a 30% discount"
             elif kind == "invoice":
