@@ -6,9 +6,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const chromePath = process.env.CHROME_PATH
-  || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-assert(existsSync(chromePath), "Set CHROME_PATH to a Chrome executable.");
+const chromePath = process.env.CHROME_PATH;
+assert(chromePath && existsSync(chromePath), "Set CHROME_PATH to a Chrome executable.");
 const artifacts = join(root, ".countermand", "browser-tests");
 mkdirSync(artifacts, { recursive: true });
 const directory = mkdtempSync(join(artifacts, "run-"));
@@ -245,10 +244,10 @@ try {
 
   // Real HTTP/UI workflow against the explicitly fake GitHub provider.
   await send("Page.navigate", { url: base + "/github" });
-  await waitFor("document.querySelector('#gh-repo').textContent === 'Tusharkshahi/TaskMind' && !document.querySelector('#gh-new').disabled", "GitHub fixture setup");
-  await evaluate(`document.querySelector('#gh-intent-input').value = 'TaskMind due-date milestone';
+  await waitFor("document.querySelector('#gh-repo').textContent === 'example-org/countermand-sandbox' && !document.querySelector('#gh-new').disabled", "GitHub fixture setup");
+  await evaluate(`document.querySelector('#gh-intent-input').value = 'Due-date milestone';
     document.querySelector('#gh-task-input').value = 'Add due-date validation\\nCover overdue-task sorting';
-    document.querySelector('#gh-confirm').value = 'Tusharkshahi/TaskMind';
+    document.querySelector('#gh-confirm').value = 'example-org/countermand-sandbox';
     document.querySelector('#gh-authorize').requestSubmit();`);
   await waitFor("!document.querySelector('#gh-work').hidden && document.querySelectorAll('#gh-issues .resource-card').length === 2", "authorized task manifest");
   const githubRun = await evaluate("document.querySelector('#gh-run-id').textContent");

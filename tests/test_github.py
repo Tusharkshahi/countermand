@@ -5,13 +5,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from countermand.github_client import GitHubClient
 from countermand.github_recovery import GitHubRecovery
 from countermand.package import source_files
 from countermand.recovery import StalePlan
 
 
 class FakeGitHub:
-    repo = "Tusharkshahi/TaskMind"
+    repo = "example-org/countermand-sandbox"
     configured = True
 
     def __init__(self):
@@ -78,6 +79,16 @@ class GitHubTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.engine.authorize("someone/other", "human")
         self.assertEqual(len(self.client.issues), 0)
+
+    def test_default_client_is_unconfigured_and_explicit_repository_is_preserved(self):
+        client = GitHubClient()
+        self.assertEqual(client.repo, "owner/sandbox-repo")
+        self.assertFalse(client.configured)
+        with self.assertRaisesRegex(ValueError, "Configure"):
+            client.request("GET")
+        configured = GitHubClient("fixture-token", "example-org/selected-repo")
+        self.assertTrue(configured.configured)
+        self.assertEqual(configured.repo, "example-org/selected-repo")
 
     def test_only_three_slots_can_be_created_and_retries_are_idempotent(self):
         self.create()
@@ -259,6 +270,7 @@ class GitHubTests(unittest.TestCase):
         names = [str(relative) for _, relative in source_files()]
         self.assertIn("start-windows.cmd", names)
         self.assertIn("WINDOWS.md", names)
+        self.assertIn("SECURITY.md", names)
         self.assertFalse(any(".countermand" in name or "__pycache__" in name for name in names))
         self.assertFalse(any(name.endswith(".json") or name.endswith(".sqlite3") for name in names))
 

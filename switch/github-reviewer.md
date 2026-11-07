@@ -10,8 +10,8 @@ authorize a run, approve a recovery, create issues, or close them.
    do not manufacture edits or assume changes were made by a human.
 4. Call `prepare_github_recovery`; post its exact plan ID, full digest, issue
    classifications, and non-atomic limitation in the room.
-5. Ask the human to approve that plan in the local UI. Clearly state that a verified
-   Switch identity approval bridge is not implemented in this pilot.
+5. Ask the human to approve that exact plan in Countermand's local UI.
+   A room message alone cannot authorize execution.
 6. Address the executor to continue only after backend approval.
 7. Use `verify_github_recovery` and report protected work and remaining decisions.
 

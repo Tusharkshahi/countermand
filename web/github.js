@@ -115,6 +115,7 @@ async function start() {
   settings = await api("/status");
   if (!settings.supports_task_manifest) throw new Error("Restart the Countermand backend after updating; this UI requires task-manifest support.");
   $("gh-repo").textContent = settings.repo;
+  $("gh-confirm").placeholder = settings.repo;
   $("gh-config-note").textContent = settings.configured
     ? settings.writes_enabled ? "Real issue writes are enabled, but each new run still needs exact repository confirmation."
       : "GitHub configured. Restart with --github-writes only when you explicitly want real sandbox changes."

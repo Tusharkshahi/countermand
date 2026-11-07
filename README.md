@@ -2,11 +2,9 @@
 
 **Recover what your agents changed. Keep what happened after.**
 
-A minimal recovery workspace for a completed workflow that turns out to be wrong.
-It records exact changes, previews bounded compensations, binds approval to a plan,
-and checks current field versions before any recovery writes.
-
-Built for the **Flip the Switch hackathon**.
+Countermand is a conflict-aware recovery layer for AI-agent workflows. It records
+actions, proposes bounded repairs, requires approval of an exact plan, and verifies
+the result without blindly overwriting newer work.
 
 ## The Problem
 
@@ -21,35 +19,21 @@ what needs a different action, preserve newer work, and expose what remains.**
 
 ![Countermand local recovery: discount restored, invoice voided, Maya's edit preserved, and the delivered notice still visible](docs/recovery-workspace.png)
 
-*Screenshot of the working synthetic rehearsal, not evidence of a live Switch run.*
+*The recovery workspace, using synthetic CRM, billing, and mailbox data.*
 
-## Current Status
+## Capabilities
 
-| Component | Status |
-| --- | --- |
-| Recovery engine, SQLite journal, minimal responsive UI, JSON export | Implemented and tested |
-| Synthetic CRM, draft invoice, local mailbox | Working deterministic adapters |
-| Exact-plan approval, stale-plan refusal, field conflicts, scoped writes | Covered by automated tests |
-| Sales and Operations stdio MCP clients | Implemented; provider wiring must be verified |
-| Windows Switch Console, Cursor provider, Slack room with two agents | Configured by the operator; agents joined the room |
-| Switch-to-Countermand forward workflow on Windows | Operator-reported successful inspection, discount, invoice, and notice calls |
-| Human-approved recovery through both Switch agents on Windows | Awaiting end-to-end verification |
-| Authenticated Switch-human approval bridge | Not implemented; approval is local |
-| Optional real GitHub Issues pilot | Implemented; tested with a fake provider, not live-verified |
+- **Action receipts:** persistent before/after values, ownership, and field versions.
+- **Exact-plan approval:** human authorization bound to a stored plan and SHA-256 digest.
+- **Conflict-aware recovery:** preserve unrelated edits and block conflicting repairs.
+- **Scoped agent tools:** separate Sales and Operations write permissions through MCP.
+- **Evidence export:** current-state checks, recovery outcomes, and unresolved consequences.
+- **GitHub Issues pilot:** an opt-in, repository-scoped workflow that preserves changed issues.
 
-**64 automated tests pass.** Browser checks cover desktop/mobile (390px/360px),
-external approval-only controls, scoped recovery, and the GitHub task-manifest flow.
-These checks were run on macOS; Windows execution needs its own check.
+## Quick Start
 
-The UI distinguishes **Local rehearsal** from **External adapters** and displays
-recorded owner-scoped action counts. Switch Console manages the room connection;
-Countermand does not probe its liveness. `/health` returns `switch_connected: null`
-and `switch_status: "not_monitored"` rather than incorrectly reporting a disconnection.
-A run being marked `switch` is not, by itself, proof of a Switch connection.
-
-## Run
-
-Python 3.11+ is the only application prerequisite. No pip or npm install is needed.
+Requirements: **Python 3.11+** and a browser. Git is needed to clone the repository.
+The application uses the Python standard library; no package installation is required.
 
 ### Windows
 
@@ -59,12 +43,12 @@ cd countermand
 .\start-windows.cmd
 ```
 
-### macOS / Linux
+### Python CLI
 
 ```sh
 git clone https://github.com/Tusharkshahi/countermand.git
 cd countermand
-python3 -m countermand.server
+python -m countermand.server
 ```
 
 Open **http://127.0.0.1:8787**.
@@ -72,21 +56,12 @@ Open **http://127.0.0.1:8787**.
 Run this from the repository root. The server binds only to loopback and stores
 state and generated credentials in the ignored `.countermand/` directory.
 
-If a local browser-preview proxy changes the browser's origin, explicitly allow
-that exact loopback origin rather than disabling origin checks:
+Keep the terminal running while using the UI or agent tools. For launcher commands,
+configuration, and browser-test setup, see the [Windows guide](WINDOWS.md).
 
-```sh
-python3 -m countermand.server --browser-origin http://127.0.0.1:60571
-```
+## Local Demo
 
-Use your preview's actual port; the example is not a permanent requirement.
-
-Windows scripts and the optional GitHub configuration are documented in
-[WINDOWS.md](WINDOWS.md). Keep the server terminal running while using the UI or tools.
-
-## Try The Story
-
-**A two-minute local demonstration, without an agent account:**
+Run the complete recovery scenario without an agent account:
 
 1. Click **Run rehearsal**. A deliberately incorrect 30% discount is recorded,
    a $700 draft invoice is created, and a notice is delivered to a local mailbox.
@@ -106,7 +81,7 @@ To test stale approval through the UI, preview a plan, then add a human edit to
 the discount before approving. Approval is refused until a fresh plan is reviewed.
 New rehearsals create isolated records; they never delete previous runs.
 
-### What Makes The Demo Different
+### Recovery Outcomes
 
 | Consequence | Recovery behavior |
 | --- | --- |
@@ -121,7 +96,7 @@ New rehearsals create isolated records; they never delete previous runs.
 The correction is not sent, and a replacement invoice is not automatically issued.
 Those are new decisions, not hidden parts of an "undo everything" button.
 
-## Where Switch Fits
+## Architecture
 
 Switch is the collaboration surface for the live-agent workflow: the human's
 request, scoped agent handoff, recovery discussion, and verification report.
@@ -141,89 +116,41 @@ Human + agents in a Switch room (Slack / Mattermost)
                 Web UI / exact-plan review
 ```
 
-The two adapters have different write scopes. The Operations agent both owns
-its service repairs and verifies the overall result; this is not an isolated
-third-party verifier or an OS-level security boundary.
+The two adapters have different write scopes. Operations owns its service repairs
+and verifies the overall result; it is not an isolated third-party verifier.
 
-### Live-Agent Setup
+### Switch Workflow
 
-1. Start Countermand, then configure a supported provider in Switch. The current
-   operator setup uses **Cursor Agent CLI on Windows**; the editor alone is insufficient.
-2. Register an executor and reviewer with separate working directories and MCP
-   configurations. Allow addressed handoffs between your own agents.
-3. Launch each MCP using the commands below. Supply only its role credential
-   privately, never the human approval credential.
-4. Click **Create agent run** in the UI and copy its run ID into the room.
-   This creates an empty run with `mode: "switch"` and disables browser impersonation
-   of the owning adapters. No adapter action is executed by creating a run.
-5. Have Sales apply the discount and hand the run ID to Operations for the invoice
-   and notice. Add a human edit, then ask for a recovery proposal.
-6. The human approves the stored plan and digest locally. Each owning agent
-   executes its portion; verification reads the actual local adapter state.
+1. Register two agents in a Switch room and configure their separate role-scoped MCP clients.
+2. Click **Create agent run** and share its ID in the room. Creating a run executes no adapter actions.
+3. Sales applies the discount; Operations creates the invoice and local notice.
+4. Add a human edit, then request a recovery proposal.
+5. Review and **Approve exact plan** in the UI. Approval alone changes no service state.
+6. Return the copied plan handoff to the room. Each agent executes only its owned repairs.
+7. Verify the resulting state and export evidence.
 
-```sh
-python3 -m countermand.mcp --role sales
-python3 -m countermand.mcp --role operations
-```
+Local rehearsal mode provides a combined **Approve & recover** convenience.
+Externally driven runs require owner-scoped execution; the browser cannot impersonate
+the owning adapters. Chat messages do not grant backend approval.
 
-Each process reads `COUNTERMAND_ADAPTER_TOKEN`. Alternatively, use
-`--credential-file` with a private JSON file containing only that role's key.
-On Windows use `py -3`; `py -3 -m countermand.doctor` prints absolute-path
-process descriptions without revealing credential values.
-
-There is deliberately **no agent-facing approval tool**. In external mode the UI
-offers **Approve exact plan**, which records approval without changing service
-state. **Copy agent handoff** copies the run ID, plan ID, and complete digest, not
-credentials. Each owning agent then executes through its scoped tools.
-A Slack "approved" message does not grant backend approval.
-
-For the synthetic room demonstration:
-
-1. After the agents finish the forward workflow, select its **external** run in the UI.
-2. Save Maya's newer contact using **Human edit**.
-3. Ask the reviewer to call `prepare_recovery` with the same run ID.
-4. Review the UI plan and click **Approve exact plan**.
-5. Copy the handoff into the room and address the owning agents. Have each call
-   `recover_owned_actions`, then inspect `verify_recovery` and export evidence.
-
-The local rehearsal's combined **Approve & recover** button remains available
-only for rehearsal mode; it cannot impersonate owners in an external run.
-
-See [Switch handoff](switch/README.md), [agent briefs](switch/), and
-[Switch's quickstart](https://docs.switchagents.ai/switch-rooms/getting-started).
+See the [Switch integration guide](switch/README.md) for credential setup,
+provider configuration, tool permissions, and agent briefs.
 
 ## Safety Model
 
-The language model is not responsible for enforcing these invariants:
+The backend enforces approval and scope; it does not delegate them to the model:
 
-- Mutations use registered operations, not generated SQL or arbitrary shell.
-- Sales credentials cannot perform Operations mutations or approve a plan.
-- Approval names a stored plan and its SHA-256 digest.
-- Each targeted field is checked by value **and version**, including ABA changes.
-- Check-and-write happens in a local SQLite transaction.
-- Recovery receipts make retries idempotent.
-- A recovery preview freezes new forward actions; late handoffs cannot append
-  unreviewed consequences. Retrying an already receipted action remains idempotent.
-- Changes to unrelated fields do not invalidate safe recovery or get overwritten.
-- A delivered notice is never marked unsent. A correction remains a new draft.
+- Local repairs check targeted values **and field versions** in a SQLite transaction.
+- Unrelated edits survive; conflicting or stale plans require renewed review.
+- Previewing recovery freezes new forward actions, while receipt retries remain idempotent.
+- Agents cannot approve plans or execute another owner's repairs.
+- Delivered history remains visible, including any unsent correction draft.
 
-The browser is a local human demo identity, not an authenticated production user.
-The service credentials grant write scopes; the synthetic evidence ledger is shared.
-Do not expose this server to a network or use production data.
-
-## What This Does Not Prove
-
-- The adapters share one local SQLite database. This is **not** a proof of
-  cross-service atomicity, distributed rollback, or separate-machine isolation.
-- The CRM/billing/mailbox story makes no real payments, production invoices, or
-  external email deliveries. Agent chat in Switch is separate from the test mailbox.
-- The action journal is persistent, not independently witnessed or tamper-proof.
-- Recovery covers instrumented demo operations only.
-- Recovery recipes are fixed and deterministic, not generated by a language model.
-- The app does not authenticate a human's Switch identity or ingest approval from chat.
-- Production execution needs per-service conditional writes, durable coordination,
-  transport identity, stronger authorization, and service-specific compensation rules.
-- A fully recovered local plan can still have irreversible or outstanding consequences.
+Countermand is a **local prototype**. CRM, billing, and mailbox adapters are synthetic;
+their transactional guarantees do not extend to external services. Approval is local,
+not a verified Switch identity decision. The journal is persistent, not tamper-proof,
+and role instructions are not OS isolation. Keep the server on loopback and avoid
+production data. See [SECURITY.md](SECURITY.md) for the complete operating boundaries.
 
 ## Optional GitHub Pilot
 
@@ -233,19 +160,25 @@ create its marked issues. Agents cannot rewrite task definitions or invent extra
 Recovery proposes closing untouched tracked issues and preserving changed ones.
 It does not edit code, delete issues, or recover untracked existing issues.
 
-Example: a team cancels a due-date milestone after its agent creates the work
-items. One teammate has already adopted an issue and added a comment. Countermand
-leaves that issue open for a human decision while closing the untouched issues
-after exact-plan approval. The point is not "undo three issues"; it is retaining
-the boundary between the agent's completed instruction and subsequent work.
-
 **Writes are disabled by default.** Configuration requires a repository-scoped
 Issues token, `--github-writes`, and explicit run authorization. See
-[Windows/GitHub setup](WINDOWS.md).
+[GitHub setup](WINDOWS.md#github-issues-pilot).
+
+To exercise the UI pilot:
+
+1. Authorize a manifest, then click **Create planned issues manually**.
+2. Add a comment or edit one created issue directly in GitHub.
+3. Click **Preview recovery**. The changed issue should be preserved.
+4. Acknowledge the non-atomic limitation and **Approve exact plan only**.
+5. Click **Execute approved recovery manually**, refresh, and export evidence.
+
+The UI pilot and MCP tools use the same backend. Manual UI execution is distinct
+from agent execution through Switch.
 
 This pilot rechecks state before closing and verifies afterward, but has **no
-verified atomic compare-and-close guarantee**. Uncertain writes stop automatic
-retries. Its tests use a fake GitHub provider; do not describe those as live API tests.
+atomic compare-and-close guarantee**. Pause concurrent edits during recovery.
+If a write has an uncertain outcome, stop and inspect GitHub; do not retry it
+or create another run to conceal the uncertainty.
 
 ## Tests
 
@@ -253,49 +186,53 @@ retries. Its tests use a fake GitHub provider; do not describe those as live API
 .\check-windows.cmd
 ```
 
-Or run directly:
+Or run the Python suite directly:
 
 ```sh
-python3 -m unittest discover -s tests -v
+python -m unittest discover -s tests -v
+```
+
+Optional JavaScript syntax checks require Node:
+
+```sh
 node --check web/app.js
 node --check web/view.js
 node --check web/github.js
 ```
 
-The optional browser test uses Node 22+ and an existing Chrome installation. It
-uses Chrome's DevTools protocol directly; no browser package is downloaded.
+The suite covers role authorization, approval boundaries, stale plans, field conflicts,
+idempotency, partial recovery, GitHub receipts, and uncertain-write handling.
+
+### Browser Checks
+
+Requires Node 22+ and an existing Chrome installation. Set `CHROME_PATH` to the
+browser executable and `PYTHON` to the Python executable, then run:
 
 ```sh
 node tests/browser.mjs
 ```
 
-On platforms other than macOS, set `CHROME_PATH` to the Chrome executable. The test
-starts an isolated server on port 8788, uses a fresh browser profile, and saves
-screenshots under `.countermand/browser-tests/`. It does not touch your normal
-browser profile or the main demo's database.
+Browser checks cover desktop and mobile layouts, rehearsal and external-run
+controls, GitHub manifests, preservation, persistence, and evidence export. They
+use an isolated server, temporary state, a fresh browser profile, and an in-memory
+GitHub provider. Automated tests make no real GitHub mutations.
 
-The browser server uses an explicitly fake, in-memory GitHub provider. It exercises
-HTTP, forms, authorization, preservation, approval, and evidence export without
-making GitHub network requests or mutations.
+Screenshots are saved under `.countermand/browser-tests/`. The
+[Windows guide](WINDOWS.md#validation) includes ready-to-run commands.
 
-The browser harness defaults to `python3`; set `PYTHON` to your Python executable
-when that name is unavailable on Windows. Node and Chrome are test-only dependencies.
+## Repository Layout
 
-## Layout
+| Path | Responsibility |
+| --- | --- |
+| `countermand/` | Journal, adapters, recovery engine, HTTP API, and scoped MCP tools |
+| `web/` | Dependency-free recovery workspace and GitHub pilot UI |
+| `switch/` | Integration instructions and role-specific agent briefs |
+| `tests/` | Recovery, authorization, transport, packaging, and browser checks |
+| `docs/` | Workspace screenshot |
 
-- `countermand/store.py`: persistent resources, field versions, and audit records.
-- `countermand/workflow.py`: bounded forward operations and human-edit receipts.
-- `countermand/recovery.py`: plan, approval, execution, and current-state verification.
-- `countermand/server.py`: loopback web server and authenticated local API.
-- `countermand/mcp.py`: role-scoped stdio tools; no human-approval tool.
-- `countermand/github_*.py`: opt-in GitHub transport, receipts, recovery, and API routes.
-- `web/`: dependency-free responsive interface.
-- `tests/`: engine, authorization, transport, and browser checks.
-- `switch/`: agent briefs and the remaining live-integration work.
+## Documentation
 
-## Next Steps Beyond The Hackathon
-
-- Verify the complete real-room workflow and publish its receipts alongside a recording.
-- Bind an authenticated Switch human decision to the exact backend plan and digest.
-- Validate real provider conditional-write semantics and durable partial-failure recovery.
-- Add supported workflows through explicit recovery contracts, not arbitrary reversal commands.
+- [Windows setup and GitHub pilot](WINDOWS.md)
+- [Switch integration and MCP tools](switch/README.md)
+- [Security and operating boundaries](SECURITY.md)
+- [Switch quickstart](https://docs.switchagents.ai/switch-rooms/getting-started)

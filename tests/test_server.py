@@ -137,7 +137,7 @@ class ServerTests(unittest.TestCase):
     def test_github_authorization_records_human_defined_manifest_and_rejects_agent_authorization(self):
         with patch.object(self.server.github, "writes_enabled", True), \
                 patch.object(self.server.github, "client") as client:
-            client.repo = "Tusharkshahi/TaskMind"
+            client.repo = "example-org/countermand-sandbox"
             client.configured = True
             body = {
                 "confirmation": client.repo, "intent": "Due-date milestone",

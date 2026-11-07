@@ -1,21 +1,10 @@
-# Switch Handoff
+# Switch Integration
 
-## Implemented Versus Pending
+Switch coordinates agent requests, addressed handoffs, and recovery reports in a
+shared room. Countermand supplies the scoped tools, deterministic recovery logic,
+local human approval, and evidence.
 
-Implemented: a working local domain, field-versioned receipts, exact-plan approval,
-and scoped MCP tools that call the same tested HTTP API used by the rehearsal.
-
-Operator setup: Windows Switch Console, Cursor provider, and a Slack room with
-two registered agents are configured. The operator reports a successful forward
-workflow through MCP: inspection, discount application, addressed handoff, invoice
-creation, and local-notice delivery. Full human-approved recovery still needs
-end-to-end verification on Windows.
-
-Pending: a verified mapping from a human's Switch identity/approval to the
-recovery API. Current human approval remains local. Do not present a room greeting
-or available tools as proof of a completed integration.
-
-## Intended Topology
+## Topology
 
 ```text
 Human in Switch room
@@ -27,29 +16,77 @@ Human in Switch room
         +-- Countermand UI ----- shared evidence and before/after inspection
 ```
 
-Use one room initially. Multi-room routing, automatic agent replacement, and extra
-coordinator agents are not needed for this scenario.
+The MCP processes and Countermand backend must run on the same host because the
+adapter API is loopback-only. The Switch room server can be managed separately.
 
-## MCP Entry Points
+## Prerequisites
 
-From the repository root:
+- A running Countermand server.
+- Switch Console with a connected messaging app, such as Slack or Mattermost.
+- A configured coding-agent provider supported by Switch.
+- Two agents with separate workspaces and role-specific MCP configurations.
+
+Follow the [Switch quickstart](https://docs.switchagents.ai/switch-rooms/getting-started)
+for Console and room setup. Keep the provider's normal permission controls enabled.
+
+## Configure MCP Clients
+
+Countermand implements newline-delimited JSON-RPC over stdio. Start the server
+first so it creates `.countermand/credentials.json`, then make two private files:
+
+- `.countermand/mcp-sales.json`, containing only the `sales` key and its token.
+- `.countermand/mcp-operations.json`, containing only the `operations` key and its token.
+
+The [Windows setup guide](../WINDOWS.md#scoped-agent-credentials) includes commands
+that create these files without printing their contents. Do not pass the combined
+credential file or the `human` key to an agent.
+
+Run the diagnostic to obtain the Python executable and absolute script paths:
 
 ```sh
-python3 -m countermand.mcp --role sales
-python3 -m countermand.mcp --role operations
+python -m countermand.doctor
 ```
 
-Each process requires `COUNTERMAND_ADAPTER_TOKEN`, supplied privately through its
-provider's environment. The server creates separate `sales`, `operations`, and
-`human` credentials in `.countermand/credentials.json`; use only the selected
-adapter's credential. Never put the human credential in either agent's environment.
+Register a separate stdio server in each agent provider. For a Cursor workspace,
+place this structure in that workspace's `.cursor/mcp.json`, replacing the paths
+with the diagnostic output:
 
-When configuring a provider that runs outside this directory, use an absolute path
-to `countermand/mcp.py` as the Python script argument. Provider-specific setup must
-be verified against the provider actually selected; no CLI registration syntax is
-assumed here.
+```json
+{
+  "mcpServers": {
+    "countermand": {
+      "type": "stdio",
+      "command": "<absolute-python-executable>",
+      "args": [
+        "<project>/countermand/mcp.py",
+        "--role", "sales",
+        "--credential-file", "<project>/.countermand/mcp-sales.json"
+      ]
+    }
+  }
+}
+```
 
-These processes implement newline-delimited JSON-RPC stdio MCP. They expose:
+For Operations, use `--role operations` and `mcp-operations.json` in its own
+workspace. Do not register both role credentials globally or in a shared workspace.
+Other providers can register the same command and arguments using their stdio
+MCP configuration format.
+
+Alternatively, omit `--credential-file` and supply only the selected role's token
+through `COUNTERMAND_ADAPTER_TOKEN` in that process's private environment.
+
+For Cursor, enable the server from each workspace:
+
+```sh
+agent mcp enable countermand
+agent mcp list-tools countermand
+```
+
+Restart an existing agent session after changing its provider configuration.
+Tool discovery confirms process startup; use `inspect_workflow` on an existing
+run to check authenticated backend access.
+
+## Tool Permissions
 
 | Tool | Sales | Operations |
 | --- | --- | --- |
@@ -60,48 +97,57 @@ These processes implement newline-delimited JSON-RPC stdio MCP. They expose:
 | `apply_demo_discount` | Yes | No |
 | `create_demo_invoice` | No | Yes |
 | `deliver_demo_notice` | No | Yes |
+| `inspect_github_run` | Yes | Yes |
+| `verify_github_recovery` | Yes | Yes |
+| `create_github_issue` | Yes | No |
+| `recover_github_issues` | Yes | No |
+| `prepare_github_recovery` | No | Yes |
 
 There is deliberately no approval tool. The server checks credentials independently
 of a process's declared role, so selecting `--role operations` while holding a
 Sales token does not grant Operations access.
 
-## Live Integration Checklist
+## Run The Recovery Scenario
 
-1. Install Switch Console and configure a supported coding-agent provider.
-2. Get one agent replying in the connected chat app (Slack or bundled Mattermost).
-3. Configure the two MCP clients with their separate role credentials.
-4. Add both agents to one private room and permit their addressed handoffs.
-5. Click **Create agent run** in the UI, or use the local human API with `mode: "switch"`.
-   This mode disables browser impersonation of the owning adapters. It is only a
-   marker, not proof that Switch is connected.
-6. Have Sales perform its action and hand the shared run ID to Operations.
-7. Have Operations create the draft and deliver the local test notice.
-8. Record a newer human edit and request recovery in the room.
-9. For the current local-approval pilot, inspect the plan in the UI and click
-   **Approve exact plan**. No service state changes on approval. Copy the exact
-   agent handoff back into the room.
-   A future human approval bridge must bind an authorized Switch user to
-   the exact plan ID and digest, authenticate the server-side approval request,
-   reject stale state, and keep the human credential away from agent processes.
-10. Execute each owner's recovery through its MCP client; inspect and export the
-    resulting evidence in the UI.
-11. Run the stale-plan and same-field-conflict cases through the room.
-12. Replace the UI's fixed connection notice only after real liveness/provenance
-    is available. A tool call alone is not evidence of a Switch connection.
+1. Invite both agents to one room and allow addressed handoffs.
+2. Click **Create agent run** in Countermand and share the exact run ID.
+3. Ask Sales to inspect the run and call `apply_demo_discount`.
+4. Have Sales address Operations with the same ID. Operations calls
+   `create_demo_invoice`, then `deliver_demo_notice`, and stops.
+5. Save a newer contact using **Human edit** in the UI.
+6. Ask Operations to call `prepare_recovery` and report the plan ID, full digest,
+   repairs, preserved work, and residual consequences.
+7. Review and **Approve exact plan** locally, then copy the handoff into the room.
+8. Have each owner call `recover_owned_actions` for that plan and digest.
+9. Call `verify_recovery`, inspect current state, and export evidence.
 
-The browser's **Approve & recover** button is a rehearsal-only convenience.
-External runs instead use approval-only controls and owner-scoped agent execution.
-Do not describe current local approval as a verified Switch human identity bridge.
+Preparing recovery freezes new forward actions. A newer conflicting discount
+blocks its repair; an unrelated contact edit stays untouched. State changes after
+preview require a fresh plan and approval.
 
-## Constraints To Preserve
+## Agent Briefs
 
-- Switch roles are instructions, not credential boundaries.
-- Shared-room content is visible to the room's members.
-- A working directory is not an OS-level sandbox.
-- Scope tools and runtime permissions before connecting an agent.
-- Freeze the server version and validate its current protocol. Do not assume old
-  SSE examples describe the current transport.
-- Never let agent dialogue be the only record that an action or approval happened.
+- [Sales / synthetic CRM](sales.md)
+- [Operations / draft billing and mailbox](operations.md)
+- [GitHub executor](github-executor.md)
+- [GitHub reviewer](github-reviewer.md)
 
-Start with the [official quickstart](https://docs.switchagents.ai/switch-rooms/getting-started)
-and [shared-responsibility guide](https://docs.switchagents.ai/switch-rooms/resources/shared-responsibility).
+For GitHub, authorize the manifest in `/github` first. The executor creates only
+the authorized slots. On a recovery request, the reviewer proposes a plan, the
+human approves it locally, and the executor performs the approved closures.
+The separate manual UI pilot does not require agent execution.
+
+## Approval And Observability
+
+Approval is local to Countermand's UI, not an authenticated Switch or Slack
+identity decision. Room messages alone cannot authorize backend execution.
+The combined **Approve & recover** button is restricted to local rehearsal mode.
+
+Countermand does not probe Switch liveness. `/health` reports
+`switch_connected: null` and `switch_status: "not_monitored"`. External-run labels
+and action receipts describe backend activity, not the transport that produced it.
+
+Roles and separate directories are not OS sandboxes. Keep credential files private,
+avoid shared/global role configuration, and do not rely on dialogue as the only
+evidence of an action. See [SECURITY.md](../SECURITY.md) and Switch's
+[shared-responsibility guide](https://docs.switchagents.ai/switch-rooms/resources/shared-responsibility).

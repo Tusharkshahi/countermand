@@ -9,7 +9,7 @@ import urllib.request
 from .store import encode
 
 
-DEFAULT_REPO = "Tusharkshahi/TaskMind"
+DEFAULT_REPO = "owner/sandbox-repo"
 
 
 def fingerprint(issue):
@@ -37,7 +37,7 @@ class GitHubClient:
             raise ValueError("Configure a repository-scoped GitHub token on this machine first")
         headers = {
             "Authorization": f"Bearer {self.token}", "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "Countermand-Hackathon",
+            "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "Countermand/0.1.0",
             "Cache-Control": "no-cache",
         }
         if body is not None:

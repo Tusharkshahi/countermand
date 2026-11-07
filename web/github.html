@@ -30,13 +30,13 @@
       <form id="gh-authorize">
         <div class="gh-manifest-fields">
           <label class="overline" for="gh-intent-input">WORKFLOW INTENT</label>
-          <input id="gh-intent-input" type="text" required maxlength="200" value="TaskMind due-date milestone" autocomplete="off">
+          <input id="gh-intent-input" type="text" required maxlength="200" value="Project kickoff" autocomplete="off">
           <label class="overline" for="gh-task-input">ISSUE TITLES / ONE PER LINE / MAXIMUM THREE</label>
           <textarea id="gh-task-input" required rows="3" maxlength="400">Add task due-date validation
 Display upcoming tasks by due date
 Cover overdue-task sorting with tests</textarea>
         </div>
-        <label class="overline" for="gh-confirm">CONFIRM OWNER / REPOSITORY</label><input id="gh-confirm" type="text" autocomplete="off" required placeholder="Tusharkshahi/TaskMind"><button class="button button-primary" id="gh-new" type="submit" disabled>Authorize task manifest</button>
+        <label class="overline" for="gh-confirm">CONFIRM OWNER / REPOSITORY</label><input id="gh-confirm" type="text" autocomplete="off" required placeholder="owner/sandbox-repo"><button class="button button-primary" id="gh-new" type="submit" disabled>Authorize task manifest</button>
       </form>
       <p class="field-help" id="gh-config-note">Live writes are off by default. Configure locally; never paste tokens into this page or chat.</p>
     </details>
@@ -55,7 +55,7 @@ Cover overdue-task sorting with tests</textarea>
         <section class="recovery-panel"><div class="section-heading"><div><span class="overline">CLOSE, PRESERVE, OR STOP</span><h2>Recovery review</h2></div><span class="subtle-badge" id="gh-plan-status">No plan</span></div><div id="gh-plan"></div></section>
       </div>
     </section>
-    <footer class="workspace-footer"><span>Local human approval / no verified Switch identity bridge yet.</span><span>No atomic GitHub recovery guarantee. Irreversible consequences stay visible.</span></footer>
+    <footer class="workspace-footer"><span>Local human approval / role-scoped execution.</span><span>No atomic GitHub recovery guarantee. Irreversible consequences stay visible.</span></footer>
   </main>
   <div class="error-notice" role="alert" id="gh-error" hidden></div>
 </body>

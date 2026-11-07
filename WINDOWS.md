@@ -1,108 +1,141 @@
-# Windows Handoff
+# Windows Setup
 
-Python 3.12.5 and Git 2.49 are sufficient for the application. No pip/npm install.
-Windows execution has not been verified on this Mac; run the included checks.
+## Requirements
 
-## Start With The Working Rehearsal
+- Python 3.11+ with the `py` launcher.
+- Git to clone the source, or an extracted source archive.
+- A browser for the local workspace.
+- Switch Console and a supported coding-agent provider for agent-driven workflows.
 
-1. Clone the separate Countermand source repository, or extract its source archive.
-   TaskMind is the workflow target, **not** the source repository to overwrite.
-2. In the extracted/cloned project folder, run `start-windows.cmd`.
-3. Open http://127.0.0.1:8787 and test the local recovery story.
-4. Run `check-windows.cmd` to run tests and print provider-launch descriptions.
+The application requires no pip or npm installation.
 
-Terminal equivalents:
+## Start The Workspace
+
+From the repository root in PowerShell:
+
+```powershell
+.\start-windows.cmd
+```
+
+Open **http://127.0.0.1:8787** and keep the server terminal running.
+Use a second terminal for configuration and validation commands.
+
+The launcher is equivalent to:
 
 ```powershell
 py -3 -m countermand.server
-py -3 -m unittest discover -s tests -v
+```
+
+Runtime state, generated credentials, and database files are stored in the ignored
+`.countermand/` directory. Restarting the server preserves saved runs.
+
+## Scoped Agent Credentials
+
+Start the server once to generate credentials. Then create one private credential
+file per role, without printing its values:
+
+```powershell
+$keys = Get-Content ".countermand\credentials.json" -Raw | ConvertFrom-Json
+foreach ($role in @("sales", "operations")) {
+    $scoped = @{}
+    $scoped[$role] = $keys.$role
+    $scoped | ConvertTo-Json | Set-Content ".countermand\mcp-$role.json" -Encoding UTF8
+}
+Remove-Variable keys, scoped
 py -3 -m countermand.doctor
 ```
 
-## Recover An Externally Driven Run
+The diagnostic prints the Python executable and absolute MCP script paths.
+Register each process with its corresponding agent provider. Never pass
+`credentials.json` or the human credential to either agent.
 
-Once the two agents have created the synthetic discount, invoice, and notice:
+For workspace-specific provider configuration and tool permissions, see the
+[Switch integration guide](switch/README.md).
 
-1. Select that **external** run in the web UI. Do not click **Run rehearsal**.
-   For a new scenario, **Create agent run** creates an empty externally driven run;
-   copy its ID using the copy icon beside the run selector.
-2. Add a human contact edit.
-3. Ask the reviewer in the Switch room to call `prepare_recovery` for the run.
-4. Inspect the proposed fields, preserved contact, residuals, and fingerprint.
-   Previewing freezes new forward work in this run; it does not repair service fields.
-5. Click **Approve exact plan**. This approves only; the service state does not change.
-6. Use **Copy agent handoff**, paste it in the room, and address the owning agents.
-7. Each agent calls `recover_owned_actions` with the exact plan ID and full digest.
-8. Read `verify_recovery` and export evidence. The original local notice remains delivered.
+## Agent-Driven Recovery
 
-The UI says **Switch status not monitored**, not "not connected." The backend does
-not probe Switch Console. Owner-scoped action receipts and actual room activity
-are separate evidence; neither a greeting nor a run-mode label proves full integration.
+1. Click **Create agent run** and copy its ID into the Switch room.
+2. Have Sales apply the synthetic discount, then Operations create the draft invoice
+   and deliver its notice to the local test mailbox.
+3. Select the external run and save a newer contact through **Human edit**.
+4. Have the reviewer call `prepare_recovery`.
+5. Inspect the repairs, preserved contact, residuals, and plan fingerprint.
+6. Click **Approve exact plan**, then **Copy agent handoff**.
+7. Send the handoff to the owning agents. Each calls `recover_owned_actions`
+   with the exact plan ID and full digest.
+8. Read `verify_recovery` and export evidence.
 
-## Opt Into Real GitHub Issues
+Previewing freezes new forward work; it does not repair service fields.
+Approval alone also changes no service state. The original notice remains
+delivered, and its correction remains an unsent draft.
 
-The GitHub pilot is disabled by default and never modifies repository code.
-It can create one to three issues in each human-authorized run, and recovery only
-considers the exact issue IDs recorded in that run. Existing issues are out of scope.
+## GitHub Issues Pilot
 
-1. Create a fine-grained GitHub token for **Tusharkshahi/TaskMind only**, with
-   Issues read/write and Metadata read permissions. Do not grant Contents access.
-2. Run `configure-github.cmd`. It prompts privately, validates the repository with
-   a read-only API request, and stores the credential in ignored local state.
-3. Stop the server and run `start-windows.cmd --github-writes`.
-4. Open http://127.0.0.1:8787/github.
-5. Open **Authorize a new workflow**, enter its intent and one to three actual issue
-   titles, and confirm the exact repository name. This fixes the manifest for the run.
-   Issue creation is a separate step, through the manual pilot button or the owning
-   agent's tool. Agents cannot add unapproved slots or rewrite the manifest.
-6. Edit one created issue **directly on GitHub** (title or a comment).
-7. Preview recovery. The edited issue should say **preserve**.
-8. Review and acknowledge the non-atomic limitation before approving the exact plan.
-9. Ask the executor to execute, or use the explicitly manual pilot action.
+Use a disposable repository, for example `owner/sandbox-repo`.
+Only newly tracked issues are eligible for recovery; existing issues and repository
+code are outside the adapter's scope.
 
-No GitHub writes were performed during preparation on the Mac. Real endpoint
-behavior must be exercised on the sandbox before presenting a live demo.
+1. Create a fine-grained GitHub token restricted to that repository with
+   **Issues: Read and write** and **Metadata: Read-only**. Do not grant Contents access.
+2. Run the private configuration prompt:
 
-Existing local databases are migrated without deleting runs. Old pilot runs retain
-their original three-task scenario; new runs use their stored explicit manifest.
+   ```powershell
+   .\configure-github.cmd
+   ```
 
-### Important Limits
+3. Enter the exact repository and token. Configuration performs a read-only
+   repository check and stores the token in `.countermand/github.json`.
+4. Stop the running server with Ctrl+C and enable the pilot:
 
-- Rechecks are not a verified atomic GitHub compare-and-close. Pause collaborators
-  during recovery; the UI explicitly requires acknowledgment.
-- `If-Match` is sent when an ETag is available, but enforcement is not assumed.
-- A timed-out create/close is marked uncertain, not retried automatically.
-- On uncertainty, inspect GitHub using the run marker and recorded issue links.
-  Do not create replacement runs to hide unknown outcomes.
-- Closing is compensation, not deletion or history erasure.
-- A local credential file is not an OS sandbox. On Windows, Unix mode bits do not
-  establish private NTFS ACLs. Keep local state private and credentials narrowly scoped.
-- Never upload `.countermand/`, copy credentials into agent prompts, or expose
-  the development server publicly.
+   ```powershell
+   .\start-windows.cmd --github-writes
+   ```
 
-## Switch Is Still Required
+5. Open **http://127.0.0.1:8787/github**.
+6. Expand **Authorize a new workflow**, enter its intent and one to three issue
+   titles, and confirm the exact repository name.
+7. For the UI pilot, click **Create planned issues manually**. This is a real GitHub write.
+8. Add a comment or edit one of those issues directly on GitHub.
+9. Preview recovery, inspect which issues are preserved, and acknowledge the
+   non-atomic limitation.
+10. Click **Approve exact plan only**, then **Execute approved recovery manually**.
+11. Refresh from GitHub, verify the resulting issue states, and export evidence.
 
-Slack may be deferred. Switch may not be omitted from the hackathon workflow.
+For agent execution, use the same authorized run with the executor and reviewer
+[GitHub briefs](switch/README.md#agent-briefs) instead of the manual creation and
+execution buttons. Both paths use the same backend controls.
 
-Install the official Windows Console:
-https://github.com/sandbox-quantum/switch/releases/latest/download/switch-console-x64.exe
+**Safety:** pause concurrent edits during execution. Rechecks and `If-Match`
+headers are not an atomic recovery guarantee. If creation or closure is uncertain,
+stop and inspect the recorded links and run markers; do not retry blindly.
+Closing issues retains their history.
 
-Windows is early access. Set up a local server and use bundled Mattermost if Slack
-configuration is taking too long. Follow the installed version's prerequisite checks.
+## Validation
 
-Then:
+Run the unit suite and local diagnostics:
 
-1. Configure a supported provider. The operator now uses Cursor: verify
-   `agent --version`, complete `agent login`, and confirm it is ready in Switch.
-   Codex is an alternative, not an application requirement.
-2. Get one agent answering in a real Switch room.
-3. Run `py -3 -m countermand.doctor` for the two scoped MCP process descriptions.
-4. Configure the executor and reviewer separately. Do not give both sets of tools
-   to both agents through a shared provider configuration.
-5. Use `switch/github-executor.md` and `switch/github-reviewer.md` as briefs.
-6. Authorize a GitHub run in the UI, then give its ID to the executor in the room.
-7. Have the reviewer prepare the recovery plan and the executor recover only after approval.
+```powershell
+.\check-windows.cmd
+```
 
-The current GitHub pilot uses **local UI human approval**, not a verified Switch
-identity bridge. Say that honestly in the demo. A live room and real tool handoffs
-must still be tested; tool availability does not prove a Switch connection.
+Browser checks additionally require Node 22+ and Chrome:
+
+```powershell
+$env:CHROME_PATH = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+$env:PYTHON = (py -3 -c "import sys; print(sys.executable)")
+node tests/browser.mjs
+```
+
+Adjust `CHROME_PATH` to the installed browser location. Browser checks use temporary
+state and an in-memory GitHub provider; they perform no real GitHub writes.
+
+## Operating Boundaries
+
+- Keep the server bound to loopback; do not expose it publicly.
+- Restrict access to local credential files with appropriate NTFS permissions.
+  Unix mode bits are not an NTFS access-control boundary.
+- Never place tokens in room messages, browser forms, source files, or exported examples.
+- Evidence exports include workflow content. Review them before publishing.
+- Approval belongs to the local UI, not to a chat message or a verified Switch identity.
+
+See [SECURITY.md](SECURITY.md) for the complete security model.

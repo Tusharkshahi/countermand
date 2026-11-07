@@ -1,4 +1,4 @@
-"""Create a source-only handoff archive, never including local state or credentials."""
+"""Create a source-only distribution archive without local state or credentials."""
 
 import argparse
 import zipfile
@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-TOP = {".gitignore", "README.md", "WINDOWS.md", "pyproject.toml",
+TOP = {".gitignore", "README.md", "WINDOWS.md", "SECURITY.md", "pyproject.toml",
        "start-windows.cmd", "check-windows.cmd", "configure-github.cmd"}
 FOLDERS = {"countermand", "web", "switch", "tests", "docs"}
 SUFFIXES = {".py", ".md", ".html", ".css", ".js", ".mjs", ".svg", ".png"}
@@ -26,7 +26,7 @@ def source_files():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output", type=Path, default=ROOT / "countermand-windows-source.zip")
+    parser.add_argument("--output", type=Path, default=ROOT / "countermand-source.zip")
     args = parser.parse_args()
     with zipfile.ZipFile(args.output, "x", zipfile.ZIP_DEFLATED) as archive:
         for path, relative in source_files():
