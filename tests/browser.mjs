@@ -14,7 +14,7 @@ mkdirSync(artifacts, { recursive: true });
 const directory = mkdtempSync(join(artifacts, "run-"));
 const base = "http://127.0.0.1:8788";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const backend = spawn("python3", [
+const backend = spawn(process.env.PYTHON || "python3", [
   "-m", "countermand.server", "--port", "8788", "--state-dir", join(directory, "state"),
 ], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
 let backendLogs = "";
